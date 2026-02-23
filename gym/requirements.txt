@@ -1,0 +1,19 @@
+asgiref==3.11.1
+Django==5.0.3
+django-extensions==4.1
+djangorestframework==3.16.1
+djangorestframework-simplejwt==5.3.1
+psycopg2-binary==2.9.9
+python-dateutil==2.9.0
+sqlparse==0.5.5
+django-cors-headers==3.13.0
+# Celery for async task processing and scheduling
+celery==5.4.0
+django-celery-beat==2.6.0
+ipython==9.10.0
+
+
+
+# RabbitMQ support (kombu is included with celery, but amqp is needed)
+# No extra package needed - celery includes librabbitmq/amqp support
+

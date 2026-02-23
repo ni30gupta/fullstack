@@ -1,0 +1,114 @@
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: gym_db
+      POSTGRES_USER: gym_user
+      POSTGRES_PASSWORD: gym_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gym_user -d gym_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5672:5672"    # AMQP port
+      - "15672:15672"  # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: gym_user
+      RABBITMQ_DEFAULT_PASS: gym_password
+      RABBITMQ_DEFAULT_VHOST: gym_vhost
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  web:
+    # shorthand: build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # shorthand: command: python manage.py runserver 0.0.0.0:8000
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+    environment:
+      - CELERY_BROKER_URL=amqp://gym_user:gym_password@rabbitmq:5672/gym_vhost
+      - CELERY_RESULT_BACKEND=rpc://
+
+    # shorthand: volumes:
+    volumes:
+      - type: bind
+        source: .
+        target: /app
+
+    # shorthand: ports:
+    ports:
+      - target: 8000
+        published: 8000
+        protocol: tcp
+        mode: host
+
+    # user: "1000:1000"
+
+  # Celery worker for processing async tasks
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A gym_service worker --loglevel=info
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - CELERY_BROKER_URL=amqp://gym_user:gym_password@rabbitmq:5672/gym_vhost
+      - CELERY_RESULT_BACKEND=rpc://
+    volumes:
+      - type: bind
+        source: .
+        target: /app
+    restart: unless-stopped
+
+  # Celery beat for scheduling periodic tasks (auto-checkout)
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A gym_service beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      celery_worker:
+        condition: service_started
+    environment:
+      - CELERY_BROKER_URL=amqp://gym_user:gym_password@rabbitmq:5672/gym_vhost
+      - CELERY_RESULT_BACKEND=rpc://
+    volumes:
+      - type: bind
+        source: .
+        target: /app
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  rabbitmq_data:

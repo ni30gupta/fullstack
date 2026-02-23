@@ -1,0 +1,57 @@
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { AuthNavigator } from './AuthNavigator';
+import { MainNavigator } from './MainNavigator';
+import QRScanner from '../screens/common/QRScanner';
+import { useAuth } from '../context';
+import { Loading } from '../components';
+import { COLORS } from '../constants/theme';
+
+const Stack = createNativeStackNavigator();
+
+export const RootNavigator = () => {
+  const { isAuthenticated, isLoading } = useAuth();
+  // console.log("Is Hermes running?", !!global.HermesInternal);
+
+  if (isLoading) {
+    return <Loading fullScreen message="Loading..." />;
+  }
+
+  return (
+    <NavigationContainer
+      theme={{
+        dark: true,
+        colors: {
+          primary: COLORS.primary,
+          background: COLORS.background,
+          card: COLORS.card,
+          text: COLORS.text,
+          border: COLORS.border,
+          notification: COLORS.primary,
+        },
+        // Ensure fonts object exists so native-stack doesn't throw when
+        // accessing properties like `fonts.regular`.
+        fonts: {
+          regular: {},
+          medium: {},
+          heavy: {},
+          bold: {},
+        },
+      }}
+    >
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {isAuthenticated ? (
+          <>
+            <Stack.Screen name="Main" component={MainNavigator} />
+            <Stack.Screen name="QRScanner" component={QRScanner} />
+          </>
+        ) : (
+          <Stack.Screen name="Auth" component={AuthNavigator} />
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+};
+
+export default RootNavigator;

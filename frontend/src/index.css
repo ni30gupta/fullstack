@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Theme variables (light) */
+:root {
+  --primary-start: #506aa8; /* muted blue */
+  --primary-end: #6b7aa8;   /* soft indigo */
+  --primary-ring: rgba(80,106,168,0.18);
+  --muted-foreground: #334155;
+}
+
+/* Reusable theme classes */
+.bg-primary-gradient {
+  background-image: linear-gradient(135deg, var(--primary-start), var(--primary-end));
+}
+.btn-primary {
+  background-image: linear-gradient(90deg, var(--primary-start), var(--primary-end));
+  color: white;
+}
+.shadow-primary {
+  box-shadow: 0 8px 20px rgba(80,106,168,0.12);
+}
+.ring-primary {
+  box-shadow: 0 0 0 4px var(--primary-ring);
+}
+
+/* Toned down helper for text */
+.text-muted { color: var(--muted-foreground); }
+
+/* Additional gentle gradients */
+:root {
+  --emerald-start: #2f855a;
+  --emerald-end: #2b9f7a;
+  --orange-start: #dd6b20;
+  --orange-end: #e53e3e;
+  --cyan-start: #0891b2;
+  --cyan-end: #0ea5a3;
+}
+.bg-emerald-gradient { background-image: linear-gradient(135deg, var(--emerald-start), var(--emerald-end)); }
+.bg-orange-gradient { background-image: linear-gradient(135deg, var(--orange-start), var(--orange-end)); }
+.bg-cyan-gradient { background-image: linear-gradient(135deg, var(--cyan-start), var(--cyan-end)); }
+
+/* App background */
+:root {
+  --bg-start: #f8fafc;
+  --bg-end: #f1f5f9;
+}
+.bg-app-gradient { background-image: linear-gradient(135deg, var(--bg-start), var(--bg-end)); }

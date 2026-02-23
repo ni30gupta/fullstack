@@ -1,0 +1,23 @@
+# Android module specific
+.gradle/
+/local.properties
+/*.iml
+*.log
+*.keystore
+*.jar
+
+# Build outputs
+build/
+app/build/
+
+# Native
+.cxx/
+.externalNativeBuild/
+
+# IDE
+.idea/
+*.iml
+
+# Misc
+.DS_Store
+

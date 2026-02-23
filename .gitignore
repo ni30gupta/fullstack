@@ -1,0 +1,49 @@
+# Repository-wide ignores
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+*.swp
+
+# Node/NPM/Yarn
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+.pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.env.*
+venv/
+.venv/
+
+# React Native / Mobile
+android/.gradle/
+ios/Pods/
+*.xcworkspace
+
+# Logs
+*.log
+logs/
+
+# Misc
+coverage/
+dist/
+build/
+.DS_Store
+
+# Secrets
+.env.local
+.env.production
+
+# Docker
+docker-compose.override.yml
+
