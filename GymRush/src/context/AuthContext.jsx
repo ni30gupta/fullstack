@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import { authService, authStorage, gymStorage } from '../services';
+import { setAuthToken, clearAuthToken } from '../services/authToken';
 
 // Initial state - split into auth, user and membership slices
 const initialState = {
@@ -68,6 +69,8 @@ export function AuthProvider({ children }) {
       }
 
       // If we have stored credentials, use them (offline-first approach)
+      // make token available in-memory for immediate requests
+      try { setAuthToken(token); } catch (e) {}
       dispatch({ type: 'SET_AUTH', payload: { isAuthenticated: true, token } });
       dispatch({ type: 'SET_USER', payload: storedUser });
       if (storedUser?.active_membership) {
@@ -84,16 +87,17 @@ export function AuthProvider({ children }) {
         if (isAuthenticatedServer && serverUser) {
           dispatch({ type: 'SET_USER', payload: serverUser });
           if (serverTokens?.access) {
+            try { setAuthToken(serverTokens.access); } catch (e) {}
             dispatch({ type: 'SET_AUTH', payload: { token: serverTokens.access, isAuthenticated: true } });
-            // persistence disabled: not saving server tokens to storage
+            // persist latest server tokens if available
+            try { await authStorage.saveTokens(serverTokens.access, serverTokens.refresh); } catch (e) {}
           }
         }
       } catch (error) {
         // Keep using stored user if server check fails
-        console.log('Server auth check failed, using cached credentials');
       }
     } catch (error) {
-      console.log('Auth check error:', error);
+      console.error('Auth check error:', error);
       dispatch({ type: 'CLEAR_AUTH' });
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
@@ -104,7 +108,6 @@ export function AuthProvider({ children }) {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
       const response = await authService.login({ username, password });
-      console.log('res',response)
 
       const user = response?.user ?? null;
       const tokens = response?.tokens ?? { access: response?.token ?? null, refresh: response?.refresh ?? null };
@@ -114,10 +117,14 @@ export function AuthProvider({ children }) {
       const activeMembership = response?.active_membership ?? response?.activeMembership ?? null;
 
       if (user) {
+        if (access) {
+          try { setAuthToken(access); } catch (e) {}
+          try { await authStorage.saveTokens(access, refresh); } catch (e) {}
+        }
+        try { await authStorage.saveUserProfile(user); } catch (e) {}
         dispatch({ type: 'SET_AUTH', payload: { isAuthenticated: true, token: access } });
         dispatch({ type: 'SET_USER', payload: user });
         dispatch({ type: 'SET_MEMBERSHIP', payload: activeMembership });
-        // persistence disabled: not saving profile/tokens/gym info to storage
         dispatch({ type: 'SET_LOADING', payload: false });
         return { success: true, user, message };
       }
@@ -150,10 +157,14 @@ export function AuthProvider({ children }) {
       const refresh = tokens?.refresh ?? null;
       const activeMembership = response?.active_membership ?? null;
       if (user) {
+        if (access) {
+          try { setAuthToken(access); } catch (e) {}
+          try { await authStorage.saveTokens(access, refresh); } catch (e) {}
+        }
+        try { await authStorage.saveUserProfile(user); } catch (e) {}
         dispatch({ type: 'SET_AUTH', payload: { isAuthenticated: true, token: access } });
         dispatch({ type: 'SET_USER', payload: user });
         dispatch({ type: 'SET_MEMBERSHIP', payload: activeMembership });
-        // persistence disabled: not saving profile/tokens to storage
       }
       dispatch({ type: 'SET_LOADING', payload: false });
     } catch (error) {
@@ -172,10 +183,10 @@ export function AuthProvider({ children }) {
           dispatch({ type: 'SET_ACTIVE_GYM', payload: profile.active_membership.gym_id });
         }
       } catch (e) {
-        console.log('Failed to set active gym on setProfile:', e);
+        // ignore profile set errors
       }
     } catch (e) {
-      console.log('Failed to set profile:', e);
+      // ignore profile set errors
     }
   }, []);
 
@@ -193,7 +204,9 @@ export function AuthProvider({ children }) {
     try {
       await authService.logout();
     } finally {
-      // clear all auth-related state (storage clearing disabled)
+      // clear in-memory token and all auth-related state
+      try { clearAuthToken(); } catch (e) { /* ignore */ }
+      try { await authStorage.clearAll(); } catch (e) { /* ignore */ }
       dispatch({ type: 'CLEAR_AUTH' });
     }
   }, []);
@@ -240,12 +253,4 @@ export function AuthProvider({ children }) {
 }
 
 // Custom hook to use auth context
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}
-
 export default AuthContext;

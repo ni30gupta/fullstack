@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { api, gymService } from '../../services';
-import { useCheckin } from '../../context';
+import { useCheckin } from '../../hooks';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SIZES } from '../../constants/theme';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -72,7 +72,8 @@ export const QRScanner = ({ navigation }) => {
     const gid = parseGymIdFromUrl(scanned);
     if (gid) {
       try {
-        const resp = await api.get(`/api/gyms/${gid}/`);
+        const { buildEndpoint, ENDPOINTS } = await import('../../constants/config');
+        const resp = await api.get(buildEndpoint(ENDPOINTS.GYM_DETAIL, { id: gid }));
         setGymPreview(resp.data);
       } catch (err) {
         setGymPreview({ gym_id: gid });
@@ -123,14 +124,13 @@ export const QRScanner = ({ navigation }) => {
       try {
         await setCheckin(session ?? selectedParts);
       } catch (e) {
-        console.log('setCheckin failed', e);
+        // ignore setCheckin failures
       }
 
       setConfirmVisible(false);
       // navigate back immediately so user doesn't stay on scanner
       navigation.goBack();
     } catch (err) {
-      console.log('QR checkin error', err);
       const message = err?.response?.data?.message || err?.message || 'Check-in failed';
       Alert.alert('Check-in Failed', message);
       // Reset to allow retry

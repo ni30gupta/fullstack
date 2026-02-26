@@ -1,10 +1,10 @@
-import React from 'react';
+
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
 import QRScanner from '../screens/common/QRScanner';
-import { useAuth } from '../context';
+import { useAuth } from '../hooks';
 import { Loading } from '../components';
 import { COLORS } from '../constants/theme';
 
@@ -12,7 +12,6 @@ const Stack = createNativeStackNavigator();
 
 export const RootNavigator = () => {
   const { isAuthenticated, isLoading } = useAuth();
-  // console.log("Is Hermes running?", !!global.HermesInternal);
 
   if (isLoading) {
     return <Loading fullScreen message="Loading..." />;

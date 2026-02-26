@@ -90,6 +90,5 @@ class CurrentActivitySerializer(serializers.Serializer):
     gym_id = serializers.IntegerField()
     gym_name = serializers.CharField()
     started_at = serializers.DateTimeField()
-    slot = serializers.CharField()
     body_parts = serializers.ListField(child=serializers.CharField())
     activity_ids = serializers.ListField(child=serializers.IntegerField())

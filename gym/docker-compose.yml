@@ -40,7 +40,7 @@ services:
       dockerfile: Dockerfile
 
     # shorthand: command: python manage.py runserver 0.0.0.0:8000
-    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    command: sh -c "python -u manage.py migrate && python -u manage.py runserver 0.0.0.0:8000"
 
     depends_on:
       db:
@@ -49,6 +49,7 @@ services:
         condition: service_healthy
 
     environment:
+      - PYTHONUNBUFFERED=1
       - CELERY_BROKER_URL=amqp://gym_user:gym_password@rabbitmq:5672/gym_vhost
       - CELERY_RESULT_BACKEND=rpc://
 

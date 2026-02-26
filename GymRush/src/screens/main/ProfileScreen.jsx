@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card, Avatar, Badge, Button } from '../../components';
-import { useAuth } from '../../context';
+import { useAuth } from '../../hooks';
 import { COLORS, SIZES } from '../../constants/theme';
 
 const MenuItem = ({ icon, title, subtitle, onPress, showBadge, badgeCount }) => (

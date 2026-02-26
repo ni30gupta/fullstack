@@ -1,2 +1,5 @@
 1. to be discuss if user chooses two body part then the weightage should be 0.5 or 1
    same way if chooses mix , then all body part will get 1/total_body_count say 0.2 each
+2. add geo fencing,in checkin, also track if already checkid in, in backend,
+
+3. map user to single device, means only device can be logged in at a time

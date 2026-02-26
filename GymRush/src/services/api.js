@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { API_CONFIG } from '../constants/config';
 import { authStorage } from './storage';
+import { getAuthToken as getInMemoryToken, setAuthToken } from './authToken';
+import { ENDPOINTS } from '../constants/config';
 
 const apiClient = axios.create({
   baseURL: API_CONFIG.BASE_URL,
@@ -13,17 +15,16 @@ const apiClient = axios.create({
 // Add debug logging to help diagnose network issues from the app
 apiClient.interceptors.request.use(
   async (config) => {
-    // attach token if available
-    const token = await authStorage.getAuthToken();
+    // attach token if available (prefer in-memory token, fallback to storage)
+    let token = getInMemoryToken();
+    if (!token) {
+      token = await authStorage.getAuthToken();
+    }
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // Diagnostic log
-    try {
-      // eslint-disable-next-line no-console
-      console.log('[api] Request:', config.method?.toUpperCase(), config.baseURL + config.url, config.data || config.params || '');
-    } catch (e) {}
+    // Diagnostic log removed
 
     return config;
   },
@@ -35,11 +36,7 @@ apiClient.interceptors.request.use(
 );
 
 apiClient.interceptors.response.use(
-  (response) => {
-    // eslint-disable-next-line no-console
-    console.log('[api] Response:', response.status, response.config?.url);
-    return response;
-  },
+  (response) => response,
   async (error) => {
     // Log the error details for debugging
     try {
@@ -54,12 +51,14 @@ apiClient.interceptors.response.use(
       const refreshToken = await authStorage.getRefreshToken();
       if (refreshToken) {
         try {
-          const response = await axios.post(`${API_CONFIG.BASE_URL}/api/auth/token/refresh/`, {
+          const response = await axios.post(`${API_CONFIG.BASE_URL}${ENDPOINTS.AUTH_TOKEN_REFRESH}`, {
             refresh: refreshToken,
           });
 
           const { access } = response.data;
-          await authStorage.saveTokens(access, refreshToken);
+          // persist the refreshed access token (refresh token unchanged)
+          try { await authStorage.saveTokens(access, refreshToken); } catch (e) {}
+          try { setAuthToken(access); } catch (e) {}
 
           originalRequest.headers.Authorization = `Bearer ${access}`;
           return apiClient(originalRequest);

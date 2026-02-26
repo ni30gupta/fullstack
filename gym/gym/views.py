@@ -3,6 +3,12 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.contrib.auth import get_user_model
 from django.db import models
+from collections import defaultdict
+from django.db.models import Q
+import logging
+
+# module logger
+logger = logging.getLogger(__name__)
 
 from .models import Gym, Membership, GymActivity, BodyPart
 from .serializers import GymSerializer, MembershipSerializer, SubscribeSerializer, ActivateMemberSerializer
@@ -13,6 +19,7 @@ from django.utils import timezone
 from datetime import timedelta, datetime
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
 
 User = get_user_model()
 
@@ -84,18 +91,20 @@ class GymViewSet(viewsets.ModelViewSet):
         body_parts = serializer.validated_data['body_parts']  # list of BodyPart instances
 
         # Check for duplicate: user already has active activity for these body parts in current/last slot
-        now = timezone.now()
-        current_slot_start, current_slot_end = GymActivity.compute_slot(now)
-        # Previous slot starts 1 hour before current slot start
+        # determine current and previous slot windows for conflict detection
+        from .utils import parse_slot_param
+        now = timezone.localtime(timezone.now())
+        today = now.date()
+        current_slot_start, current_slot_end = parse_slot_param(today, 'current')
+        # previous slot is one hour before current start
         prev_slot_start = current_slot_start - timedelta(hours=1)
 
-        # Look for active (ended_at is NULL) activities in current or previous slot window
+        # Look for active activities started in current or previous slot window
         active_conflicts = GymActivity.objects.filter(
             user=request.user,
             gym=gym,
-            body_part__in=body_parts,
-            ended_at__isnull=True,
-            started_at__gte=prev_slot_start
+            # body_part__in=body_parts,
+            ended_at__isnull=True,  # still active
         ).select_related('body_part')
 
         if active_conflicts.exists():
@@ -112,13 +121,16 @@ class GymViewSet(viewsets.ModelViewSet):
             activities.append(activity)
 
         # Compute slot from first activity
-        slot_start, slot_end = GymActivity.compute_slot(timezone.now())
-        slot_str = f"{slot_start.strftime('%H:%M')} - {slot_end.strftime('%H:%M')}"
+        # compute slot using current local time
+        now = timezone.localtime(timezone.now())
+        # slot string no longer returned; frontend can compute if needed
+        # slot_start, slot_end = GymActivity.compute_slot(now)
+        # slot_str = f"{slot_start.strftime('%H:%M')} - {slot_end.strftime('%H:%M')}"
 
         data = {
             'gym_id': gym.id,
-            'check_in_time': timezone.now(),
-            'slot': slot_str,
+            # send ISO formatted with timezone offset so frontend sees local time
+            'started_at': now.isoformat(),
             'body_parts': [bp.name for bp in body_parts],
             'activity_ids': [a.id for a in activities],
         }
@@ -300,22 +312,35 @@ class GymViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated],
             url_path='rush-data')
     def rush_data(self, request, pk=None):
-        """Get gym rush data in data_type2 format for a specific date.
+        """Get gym rush data for a specific date and slot.
 
-        GET /api/gyms/{id}/rush-data/?date=2024-06-01
+        GET /api/gyms/{id}/rush-data/?date=2026-02-26&slot=current
+
+        slot: current, next, next_to_next
 
         Returns:
         {
-          "date": "2024-06-01",
-          "time_slot": [
-            {"start": "08:00", "end": "09:00", "body_part_breakdown": {"CHEST": 10, "BACK": 5}},
-            {"start": "09:00", "end": "10:00", "body_part_breakdown": {"CHEST": 1, "BACK": 2, "LEGS": 5}}
-          ]
+            "date": "2026-02-26",
+            "time_slot": [
+                {
+                    "start": "13:30",
+                    "end": "14:30",
+                    "body_part_breakdown": {
+                        "BACK": 1,
+                        "LEGS": 1
+                    },
+                    "change": {
+                        "LEGS": 0,
+                        "BACK": 0
+                    }
+                }
+            ]
         }
         """
         from collections import defaultdict
-        from datetime import datetime as dt
-
+        from datetime import datetime, timedelta
+        from django.utils import timezone
+        logger.debug('rush_data called for gym %s', pk)
         gym = self.get_object()
 
         # Owner/staff only
@@ -328,37 +353,88 @@ class GymViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Query parameter "date" is required (YYYY-MM-DD).'},
                             status=status.HTTP_400_BAD_REQUEST)
         try:
-            target_date = dt.strptime(date_str, '%Y-%m-%d').date()
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
             return Response({'detail': 'Invalid date format. Use YYYY-MM-DD.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        activities = GymActivity.objects.filter(gym=gym, started_at__date=target_date).select_related('body_part')
+        slot_param = request.query_params.get('slot')
+        if slot_param not in ['current', 'next', 'next_to_next']:
+            return Response({'detail': 'Query parameter "slot" must be one of: current, next, next_to_next.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        # Group by slot
-        slot_data = defaultdict(lambda: defaultdict(int))
+        from .utils import parse_slot_param
+        slot_start_utc, slot_end_utc = parse_slot_param(target_date, slot_param)
+        print('##### slot_start_utc, slot_end_utc', slot_start_utc, slot_end_utc)
+        if not slot_start_utc or not slot_end_utc:
+            return Response({'detail': 'Invalid slot parameter.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Current slot activities
+        activities = GymActivity.objects.filter(
+            gym=gym,
+            started_at__gte=slot_start_utc,
+            started_at__lt=slot_end_utc
+        ).filter(
+            Q(ended_at__isnull=True) | Q(ended_at__gte=slot_end_utc)
+        ).select_related('body_part')
+        
+        print("##### activities count", activities.count())
+        
+        current_counts = defaultdict(int)
         for act in activities:
-            slot = act.slot  # e.g., "08:00-09:00"
             body_part_name = act.body_part.name if act.body_part else 'UNKNOWN'
-            slot_data[slot][body_part_name] += 1
+            current_counts[body_part_name] += 1
 
-        # Build response sorted by start time
-        time_slots = []
-        for slot in sorted(slot_data.keys()):
-            start, end = slot.split('-')
-            breakdown = slot_data[slot]
-            # Sort body parts by descending count so highest usage appears first
-            sorted_items = sorted(breakdown.items(), key=lambda kv: kv[1], reverse=True)
-            ordered_breakdown = dict(sorted_items)
-            time_slots.append({
-                'start': start,
-                'end': end,
-                'body_part_breakdown': ordered_breakdown
-            })
+        # Previous slot for computing "change".  We want the slot immediately
+        # before the one being requested, not an arbitrary 30‑minute window.
+        #
+        #   current        -> compare against the hour immediately before
+        #   next           -> compare against the current slot
+        #   next_to_next   -> compare against the next slot
+        if slot_param == 'current':
+            prev_slot_start_utc = slot_start_utc - timedelta(hours=1)
+            prev_slot_end_utc = slot_start_utc
+        elif slot_param == 'next':
+            prev_slot_start_utc, prev_slot_end_utc = parse_slot_param(target_date, 'current')
+        else:  # next_to_next
+            prev_slot_start_utc, prev_slot_end_utc = parse_slot_param(target_date, 'next')
+
+        prev_activities = GymActivity.objects.filter(
+            gym=gym,
+            started_at__gte=prev_slot_start_utc,
+            started_at__lt=prev_slot_end_utc
+        ).filter(
+            Q(ended_at__isnull=True) | Q(ended_at__gte=prev_slot_end_utc)
+        ).select_related('body_part')
+
+        prev_counts = defaultdict(int)
+        for act in prev_activities:
+            body_part_name = act.body_part.name if act.body_part else 'UNKNOWN'
+            prev_counts[body_part_name] += 1
+
+        from .utils import diff_body_part_counts
+        change = diff_body_part_counts(current_counts, prev_counts)
+
+        # Format start/end in local time
+        slot_start_local = slot_start_utc.astimezone(timezone.get_current_timezone())
+        slot_end_local = slot_end_utc.astimezone(timezone.get_current_timezone())
+        start_str = slot_start_local.strftime('%H:%M')
+        end_str = slot_end_local.strftime('%H:%M')
+
+        # Sort body parts by descending count
+        sorted_breakdown = dict(sorted(current_counts.items(), key=lambda x: x[1], reverse=True))
+
+        time_slot = [{
+            'start': start_str,
+            'end': end_str,
+            'body_part_breakdown': sorted_breakdown,
+            'change': change
+        }]
 
         return Response({
             'date': date_str,
-            'time_slot': time_slots
+            'time_slot': time_slot
         })
 
 
@@ -395,14 +471,12 @@ class MyActivityView(APIView):
                 'gym_id': gid,
                 'gym_name': a.gym.name,
                 'started_at': a.started_at,
-                'slot': a.slot,
                 'body_parts': [],
                 'activity_ids': [],
             })
             # keep the earliest started_at among grouped activities
             if a.started_at < grp['started_at']:
                 grp['started_at'] = a.started_at
-                grp['slot'] = a.slot
             grp['body_parts'].append(a.body_part.name if a.body_part else 'UNKNOWN')
             grp['activity_ids'].append(a.id)
 
@@ -413,6 +487,69 @@ class MyActivityView(APIView):
 
         serializer = CurrentActivitySerializer(first)
         return Response(serializer.data)
+
+
+class CheckoutView(APIView):
+    """Endpoint to checkout (end) a GymActivity session.
+
+    POST /api/gym/check-out/{session_id}/
+
+    Body: none
+
+    Permission: authenticated user must own the activity or be staff.
+    """
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request, session_id=None, *args, **kwargs):
+        # If a specific session_id is provided, behave as before (checkout single activity)
+        if session_id is not None:
+            activity = get_object_or_404(GymActivity, id=session_id)
+
+            # Permission: only owner or staff may check out this activity
+            if activity.user != request.user and not request.user.is_staff:
+                return Response({'detail': 'You do not have permission to check out this session.'}, status=status.HTTP_403_FORBIDDEN)
+
+            # Use model helper to mark ended
+            changed = activity.checkout()
+            if not changed:
+                return Response({'detail': 'Session already checked out.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # success: return empty 200 (no body)
+            return Response(status=status.HTTP_200_OK)
+
+        # Otherwise, determine the user's current gym (most likely one active gym)
+        # and checkout only activities for that gym. This avoids ending activities
+        # across multiple gyms if the user somehow has active activities in more than one.
+        active_qs = GymActivity.objects.filter(user=request.user, ended_at__isnull=True).select_related('gym')
+        if not active_qs.exists():
+            return Response({'detail': 'No active sessions found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Group activities by gym id
+        from collections import defaultdict
+        groups = defaultdict(list)
+        for a in active_qs:
+            groups[a.gym.id].append(a)
+
+        # Choose the gym with the most active activities (practical default)
+        chosen_gym_id = max(groups.keys(), key=lambda k: len(groups[k]))
+        chosen_activities = groups[chosen_gym_id]
+
+        checked_out = []
+        details = []
+        for activity in chosen_activities:
+            changed = activity.checkout()
+            if changed:
+                checked_out.append(activity.id)
+                details.append({
+                    'activity_id': activity.id,
+                    'gym_id': activity.gym.id,
+                    'gym_name': activity.gym.name,
+                    'body_part': activity.body_part.name if activity.body_part else None,
+                    'ended_at': timezone.localtime(activity.ended_at) if activity.ended_at else None,
+                })
+
+        # success: return empty 200 (no body)
+        return Response(status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated],
             url_path='slot-load')

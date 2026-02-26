@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context';
 
 const Header = ({ gymInfo, profile, onToggle, loading }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, gymDetails } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -34,12 +34,23 @@ const Header = ({ gymInfo, profile, onToggle, loading }) => {
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg bg-primary-gradient">
               <span className="text-white font-bold text-lg">
-                {loading ? '...' : gymInfo?.name?.charAt(0) || 'G'}
+                {loading ? '...' : (gymDetails?.name?.charAt(0) || gymInfo?.name?.charAt(0) || 'G')}
               </span>
             </div>
             <div className="hidden sm:block">
-              <h1 className="font-semibold text-gray-900 text-lg">
-                {loading ? 'Loading...' : gymInfo?.name || 'Gym Admin'}
+              <h1 className="font-semibold text-gray-900 text-lg flex items-center gap-1">
+                {loading ? 'Loading...' : (gymDetails?.name || gymInfo?.name || 'Gym Admin')}
+                {!loading && (
+                  (gymDetails?.verified || gymInfo?.verified) ? (
+                    <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.707a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-1-5a1 1 0 112 0v1a1 1 0 11-2 0v-1zm0-6a1 1 0 012 0v4a1 1 0 11-2 0V7z" clipRule="evenodd" />
+                    </svg>
+                  )
+                )}
               </h1>
               <p className="text-xs text-gray-500">{gymInfo?.openingHours || 'Admin Dashboard'}</p>
             </div>

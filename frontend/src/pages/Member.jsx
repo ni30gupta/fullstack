@@ -6,8 +6,7 @@ import StatusBadge from '../components/members/StatusBadge'
 import EditMemberModal from '../components/members/EditMemberModal'
 
 const Member = () => {
-  const gymId = 2; // TODO: make dynamic
-  const { members, refresh } = useMemberList(gymId);
+  const { members, refresh } = useMemberList();
 
   const [selected, setSelected] = useState(null);
   const [editing, setEditing] = useState(false);

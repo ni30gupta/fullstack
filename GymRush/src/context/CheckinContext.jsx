@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useEffect, useState } from 'react';
 import { gymService } from '../services';
+import { useAuth } from '../hooks';
 
 const initialState = {
   checkedIn: false,
@@ -15,23 +16,26 @@ const initialState = {
 function reducer(state, action) {
   switch (action.type) {
     case 'SET_CHECKIN': {
-      const payload = action.payload || {};
-      const full = payload.full || payload; // support either { full: session } or direct session
-      const bodyParts = full.body_parts ?? payload.body_parts ?? state.lastBodyParts;
-      const at = full.started_at ?? payload.at ?? state.lastCheckinAt;
-      const gymId = full.gym_id ?? state.gymId;
-      const gymName = full.gym_name ?? state.gymName;
-      const slot = full.slot ?? state.lastSlot;
-      const activityIds = full.activity_ids ?? payload.activity_ids ?? state.lastActivityIds;
+      const session = action.payload ?? null;
+      // normalize session id: backend groups activities and returns `activity_ids`.
+      // if a top-level `id` is missing, use the first activity id as the session id.
+      const sessionId = session?.id ?? (session?.activity_ids && session.activity_ids.length ? session.activity_ids[0] : null);
+      const sessionWithId = session ? { ...session, id: sessionId } : null;
+      const bodyParts = session?.body_parts ?? [];
+      const at = sessionWithId?.started_at ?? null;
+      const gymId = sessionWithId?.gym_id ?? null;
+      const gymName = sessionWithId?.gym_name ?? null;
+      const slot = sessionWithId?.slot ?? null;
+      const activityIds = sessionWithId?.activity_ids ?? [];
 
       return {
         ...state,
-        checkedIn: true,
-        lastCheckin: full ?? null,
+        checkedIn: !!sessionWithId,
+        lastCheckin: sessionWithId,
         lastBodyParts: bodyParts,
         lastCheckinAt: at,
-        gymId: gymId,
-        gymName: gymName,
+        gymId,
+        gymName,
         lastSlot: slot,
         lastActivityIds: activityIds,
       };
@@ -47,39 +51,41 @@ const CheckinContext = createContext(undefined);
 
 export function CheckinProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const { isAuthenticated } = useAuth();
 
-  // on mount, try to restore current activity from backend (`/api/gyms/my-activity/`)
+  // Restore current activity when authenticated (or on mount if already authenticated)
   useEffect(() => {
     let mounted = true;
+    if (!isAuthenticated) {
+      // don't attempt restore until we have a valid auth token
+      return () => { mounted = false; };
+    }
+
     (async () => {
       try {
         const data = await gymService.getMyActivity();
         if (!mounted) return;
         if (data && Object.keys(data).length > 0) {
-          dispatch({ type: 'SET_CHECKIN', payload: { full: data } });
+          dispatch({ type: 'SET_CHECKIN', payload: data });
         } else {
           dispatch({ type: 'CLEAR_CHECKIN' });
         }
       } catch (e) {
-        // don't block mount on errors; keep checkin cleared
-        console.log('Checkin restore error', e);
+        // ignore restore errors
       }
     })();
     return () => { mounted = false; };
-  }, []);
+  }, [isAuthenticated]);
 
-  // setCheckin now accepts either a full session object or an array of bodyParts
-  const setCheckin = useCallback(async (sessionOrBody = []) => {
-    try {
-      let payload;
-      if (sessionOrBody && typeof sessionOrBody === 'object' && (sessionOrBody.gym_id || sessionOrBody.started_at || sessionOrBody.activity_ids)) {
-        payload = { full: sessionOrBody };
-      } else {
-        payload = { checkedIn: true, body_parts: Array.isArray(sessionOrBody) ? sessionOrBody : [], at: new Date().toISOString() };
+  // setCheckin expects a full session object (the API response)
+  const setCheckin = useCallback(async (session) => {
+      try {
+      if (!session || typeof session !== 'object') {
+        return;
       }
-      dispatch({ type: 'SET_CHECKIN', payload });
+      dispatch({ type: 'SET_CHECKIN', payload: session });
     } catch (e) {
-      console.log('Checkin setCheckin error', e);
+      // ignore setCheckin errors
     }
   }, []);
 
@@ -87,18 +93,54 @@ export function CheckinProvider({ children }) {
     try {
       dispatch({ type: 'CLEAR_CHECKIN' });
     } catch (e) {
-      console.log('Checkin clearCheckin error', e);
+      // ignore clearCheckin errors
     }
   }, []);
 
-  const value = { ...state, setCheckin, clearCheckin };
+  // local loading/error for async checkin actions
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const checkIn = useCallback(async (gymId = null, bodyParts = []) => {
+    setLoading(true); setError(null);
+    try {
+      const session = await gymService.checkIn(gymId, bodyParts);
+      await setCheckin(session);
+      return session;
+    } catch (e) {
+      setError(e?.message || String(e));
+      throw e;
+    } finally { setLoading(false); }
+  }, [setCheckin]);
+
+  // checkOut(sessionId?) - if sessionId provided, checkout that activity; otherwise checkout all activities for current gym
+  const checkOut = useCallback(async (sessionId = null) => {
+    console.log('CheckinContext.checkOut() called, explicit sessionId:', sessionId);
+    setLoading(true); setError(null);
+    try {
+      let res;
+      if (sessionId) {
+        console.log('CheckinContext.checkOut: calling gymService.checkOut with id', sessionId);
+        res = await gymService.checkOut(sessionId);
+      } else {
+        console.log('CheckinContext.checkOut: calling gymService.checkOut (bulk for current gym)');
+        res = await gymService.checkOut();
+      }
+      console.log('CheckinContext.checkOut: gymService.checkOut response', res);
+      // clear local checkin state when we've successfully checked out
+      await clearCheckin();
+      console.log('CheckinContext.checkOut: cleared local checkin state');
+      return res;
+    } catch (e) {
+      console.error('CheckinContext.checkOut error', e);
+      setError(e?.message || String(e));
+      throw e;
+    } finally { setLoading(false); }
+  }, [clearCheckin]);
+
+  const value = { ...state, setCheckin, clearCheckin, checkIn, checkOut, loading, error };
   return <CheckinContext.Provider value={value}>{children}</CheckinContext.Provider>;
 }
 
-export function useCheckin() {
-  const ctx = useContext(CheckinContext);
-  if (ctx === undefined) throw new Error('useCheckin must be used within CheckinProvider');
-  return ctx;
-}
 
 export default CheckinContext;

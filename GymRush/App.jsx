@@ -29,6 +29,7 @@ const App = () => {
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
+        
         <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
         <AuthProvider>
           <CheckinProvider>

@@ -1,4 +1,5 @@
 import api from './api';
+import { ENDPOINTS } from '../constants/config';
 // authService should only call APIs and return data.
 // Persistence is handled by the AuthProvider (context).
 
@@ -35,7 +36,7 @@ const handleError = (error) => {
 export const authService = {
   async login(credentials) {
     try {
-      const response = await api.post('/api/auth/login/', credentials);
+      const response = await api.post(ENDPOINTS.AUTH_LOGIN, credentials);
       // Return the raw API response data; AuthProvider will handle persistence/state.
       return response.data;
     } catch (error) {
@@ -45,7 +46,7 @@ export const authService = {
 
   async register(data) {
     try {
-      const response = await api.post('/api/auth/register/', data);
+      const response = await api.post(ENDPOINTS.AUTH_REGISTER, data);
       // Return API response; persistence handled by AuthProvider
       return response.data;
     } catch (error) {
@@ -55,9 +56,9 @@ export const authService = {
 
   async logout() {
     try {
-      await api.post('/api/auth/logout/');
+      await api.post(ENDPOINTS.AUTH_LOGOUT);
     } catch (error) {
-      console.log('Logout API error:', error);
+      console.error('Logout API error:', error);
     } finally {
       // Do not clear storage here; AuthProvider is responsible for clearing/persisting state
     }
@@ -65,7 +66,7 @@ export const authService = {
 
   async getProfile() {
     try {
-      const response = await api.get('/api/auth/profile/');
+      const response = await api.get(ENDPOINTS.AUTH_PROFILE);
       return response.data;
     } catch (error) {
       throw handleError(error);
@@ -74,7 +75,7 @@ export const authService = {
 
   async updateProfile(data) {
     try {
-      const response = await api.patch('/api/auth/profile/', data);
+      const response = await api.patch(ENDPOINTS.AUTH_PROFILE, data);
       return response.data;
     } catch (error) {
       throw handleError(error);
@@ -83,7 +84,7 @@ export const authService = {
 
   async forgotPassword(email) {
     try {
-      await api.post('/api/auth/forgot-password/', { email });
+      await api.post(ENDPOINTS.AUTH_FORGOT_PASSWORD, { email });
     } catch (error) {
       throw handleError(error);
     }

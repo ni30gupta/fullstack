@@ -1,5 +1,6 @@
 import api from './api';
 import { gymStorage } from './storage';
+import { ENDPOINTS, buildEndpoint } from '../constants/config';
 
 const handleError = (error) => {
   if (error.response) {
@@ -32,7 +33,7 @@ const handleError = (error) => {
 export const gymService = {
   async getGymInfo() {
     try {
-      const response = await api.get('/api/gym/info/');
+      const response = await api.get(ENDPOINTS.GYM_INFO);
       return response.data;
     } catch (error) {
       throw handleError(error);
@@ -52,7 +53,7 @@ export const gymService = {
       }
 
       const payload = bodyParts && bodyParts.length ? { body_parts: bodyParts } : {};
-      const response = await api.post(`/api/gyms/${id}/checkin/`, payload);
+      const response = await api.post(buildEndpoint(ENDPOINTS.GYM_CHECKIN, { id }), payload);
       return response.data;
     } catch (error) {
       throw handleError(error);
@@ -61,7 +62,13 @@ export const gymService = {
 
   async checkOut(sessionId) {
     try {
-      const response = await api.post(`/api/gym/check-out/${sessionId}/`);
+      let url;
+      if (sessionId) {
+        url = buildEndpoint(ENDPOINTS.GYM_CHECKOUT, { id: sessionId });
+      } else {
+        url = ENDPOINTS.GYM_CHECKOUT_BASE || ENDPOINTS.GYM_CHECKOUT.replace('/:id', '/');
+      }
+      const response = await api.post(url);
       return response.data;
     } catch (error) {
       throw handleError(error);
@@ -70,7 +77,7 @@ export const gymService = {
 
   async getWorkoutHistory(page = 1, limit = 20) {
     try {
-      const response = await api.get(`/api/gym/sessions/?page=${page}&limit=${limit}`);
+      const response = await api.get(`${ENDPOINTS.GYM_SESSIONS}?page=${page}&limit=${limit}`);
       return response.data;
     } catch (error) {
       throw handleError(error);
@@ -79,7 +86,7 @@ export const gymService = {
 
   async getTrainers() {
     try {
-      const response = await api.get('/api/gym/trainers/');
+      const response = await api.get(ENDPOINTS.GYM_TRAINERS);
       return response.data;
     } catch (error) {
       throw handleError(error);
@@ -88,7 +95,7 @@ export const gymService = {
 
   async getMyActivity() {
     try {
-      const response = await api.get('/api/gyms/my-activity/');
+      const response = await api.get(ENDPOINTS.GYMS_MY_ACTIVITY);
       return response.data;
     } catch (error) {
       throw handleError(error);
@@ -97,7 +104,7 @@ export const gymService = {
 
   async getTrainerSlots(trainerId, date) {
     try {
-      const response = await api.get(`/api/gym/trainers/${trainerId}/slots/?date=${date}`);
+      const response = await api.get(`${buildEndpoint(ENDPOINTS.TRAINER_SLOTS, { id: trainerId })}?date=${encodeURIComponent(date)}`);
       return response.data;
     } catch (error) {
       throw handleError(error);
@@ -106,7 +113,7 @@ export const gymService = {
 
   async bookTrainerSlot(trainerId, slotId, notes) {
     try {
-      const response = await api.post('/api/gym/bookings/', {
+      const response = await api.post(ENDPOINTS.BOOKINGS, {
         trainer_id: trainerId,
         slot_id: slotId,
         notes,
@@ -119,7 +126,7 @@ export const gymService = {
 
   async getMyBookings() {
     try {
-      const response = await api.get('/api/gym/bookings/');
+      const response = await api.get(ENDPOINTS.BOOKINGS);
       return response.data;
     } catch (error) {
       throw handleError(error);
@@ -128,7 +135,7 @@ export const gymService = {
 
   async cancelBooking(bookingId) {
     try {
-      await api.delete(`/api/gym/bookings/${bookingId}/`);
+      await api.delete(buildEndpoint(ENDPOINTS.BOOKING_DELETE, { id: bookingId }));
     } catch (error) {
       throw handleError(error);
     }

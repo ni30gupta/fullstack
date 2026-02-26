@@ -6,8 +6,9 @@ from rest_framework.decorators import action
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
 from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, UserProfileSerializer
+from gym.serializers import GymSerializer
 from .models import UserProfile
-from gym.models import Membership
+from gym.models import Membership, Gym
 
 
 class IsOwnerOrAdmin(permissions.BasePermission):
@@ -63,6 +64,21 @@ class LoginView(APIView):
         
         if user is not None:
             tokens = get_tokens_for_user(user)
+            # If the user is a gym owner, return gym details instead of membership info
+            try:
+                gym = Gym.objects.get(owner=user)
+            except Gym.DoesNotExist:
+                gym = None
+
+            if gym is not None:
+                gym_data = GymSerializer(gym).data
+                return Response({
+                    'user': UserSerializer(user).data,
+                    'tokens': tokens,
+                    'gym_details': gym_data,
+                    'message': 'Login successful (owner)'
+                }, status=status.HTTP_200_OK)
+
             # include only the active membership (user can be active in at most one gym)
             active_obj = Membership.objects.filter(user=user, is_active=True).select_related('gym').order_by('-created_at').first()
             if active_obj:

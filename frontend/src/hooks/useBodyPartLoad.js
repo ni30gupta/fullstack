@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../context';
 import gymService from '../api/gymService';
 
 // Mock body part load data for development
@@ -29,33 +30,28 @@ export const useBodyPartLoad = ( ) => {
   const [error, setError] = useState(null);
   
   
-  const getCurrentRush = useCallback(async (dateStr) => {
+  const { gymDetails, membership } = useAuth();
+  const gymId = gymDetails?.id || membership?.gym_id || null;
+
+  const getCurrentRush = useCallback(async (dateStr, slot = null, overrideGymId = null) => {
     console.log('hook', dateStr);
+    const id = overrideGymId || gymId;
+    if (!id) {
+      throw new Error('gym_id is required for getCurrentRush');
+    }
     try {
-      const data = await gymService.getCurrentRush(2, dateStr);
-      console.log('in hook data',data);
+      const effectiveSlot = slot || 'current';
+    const data = await gymService.getCurrentRush(id, dateStr, effectiveSlot);
+      console.log('in hook data', data);
       return data;
     } catch (err) {
       console.error(err);
       throw err;
     }
-  }, []);
+  }, [gymId]);
 
   
-  const fetchBodyPartLoad = useCallback(async (slotId = null) => {
-    try {
-      setLoading(true);
-      const response = await gymService.getBodyPartLoad(slotId);
-      setBodyPartLoad(response.data.bodyParts || response.data);
-      setError(null);
-    } catch (err) {
-      setError(err.message || 'Failed to fetch body part load');
-      // Use mock data for development
-      setBodyPartLoad(mockBodyPartLoad.current);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+
 
   const fetchSlots = useCallback(async () => {
     try {
@@ -69,13 +65,13 @@ export const useBodyPartLoad = ( ) => {
 
   useEffect(() => {
     // On mount fetch available slots and initial body part load
-    fetchBodyPartLoad();
-  }, [ fetchBodyPartLoad]);
+    getCurrentRush();
+  }, [getCurrentRush]);
 
   const changeSlot = useCallback((slotId) => {
     setSelectedSlot(slotId);
     fetchBodyPartLoad(slotId === 'current' ? null : slotId);
-  }, [fetchBodyPartLoad]);
+  }, [getCurrentRush]);
 
   return {
     // bodyPartLoad,
@@ -85,7 +81,7 @@ export const useBodyPartLoad = ( ) => {
     loading,
     error,
     getCurrentRush,
-    refetch: () => fetchBodyPartLoad(selectedSlot === 'current' ? null : selectedSlot),
+    refetch: () => getCurrentRush(selectedSlot === 'current' ? null : selectedSlot),
   };
 };
 

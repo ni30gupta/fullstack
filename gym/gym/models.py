@@ -158,27 +158,12 @@ class GymActivity(models.Model):
         status = "Active" if self.ended_at is None else "Completed"
         return f"{self.user.username} - {self.body_part.name} at {self.gym.name} ({status})"
 
-    @staticmethod
-    def compute_slot(dt, slot_duration_mins=60):
-        """Return slot start/end rounded up to next half-hour from given datetime.
-
-        Example: 08:23 -> slot 08:30 - 09:30 (with default 60 min duration).
-        """
-        from datetime import timedelta
+    def checkout(self, ended_at=None):
+        """Mark this activity as ended. Returns True if updated, False if already ended."""
         from django.utils import timezone
 
-        t = timezone.localtime(dt)
-        minute = t.minute
-        if minute % 30 == 0 and t.second == 0 and t.microsecond == 0:
-            slot_start = t.replace(second=0, microsecond=0)
-        else:
-            add_mins = 30 - (minute % 30)
-            slot_start = (t + timedelta(minutes=add_mins)).replace(second=0, microsecond=0)
-        slot_end = slot_start + timedelta(minutes=slot_duration_mins)
-        return slot_start, slot_end
-
-    @property
-    def slot(self):
-        """Return slot as string 'HH:MM - HH:MM' for API response."""
-        start, end = self.compute_slot(self.started_at)
-        return f"{start.strftime('%H:%M')} - {end.strftime('%H:%M')}"
+        if self.ended_at is not None:
+            return False
+        self.ended_at = ended_at or timezone.now()
+        self.save(update_fields=['ended_at'])
+        return True

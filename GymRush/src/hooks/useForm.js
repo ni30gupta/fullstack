@@ -93,7 +93,6 @@ export function useForm(arg1 = {}, arg2) {
   const handleSubmit = useCallback(
     (fn) =>
       async (...args) => {
-        console.log('ffffffff')
         const valid = validateForm();
         if (!valid) return { success: false, errors };
         setSubmitting(true);

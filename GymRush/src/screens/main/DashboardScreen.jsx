@@ -2,11 +2,9 @@
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card, Avatar } from '../../components';
-import { useAuth, useCheckin } from '../../context';
-
-import { useCheckinActions, useMyActivity } from '../../hooks';
+import { useAuth, useCheckin } from '../../hooks';
 import { COLORS, SIZES } from '../../constants/theme';
-import {  useCallback, useEffect } from 'react';
+
 
 // Format time from ISO string
 const formatTime = (isoStr) => {
@@ -19,35 +17,23 @@ const formatTime = (isoStr) => {
 
 export const DashboardScreen = ({ navigation }) => {
   const { user } = useAuth();
-  const { gymName, lastSlot, lastBodyParts, lastCheckinAt } = useCheckin();
-  const { checkIn, checkOut, isCheckedIn, loading: checkInLoading } = useCheckinActions();
-
-  const { activity, isLoading, currentActivity } = useMyActivity();
-
-  const handleRefresh = useCallback(async () => {
-    try {
-      await currentActivity(); // re-fetches and updates `activity` in the hook
-    } catch (e) {
-      console.error('Refresh failed', e);
-    }
-  }, [currentActivity]);
+  const { lastCheckin, checkedIn: isCheckedIn, checkIn, checkOut, loading: checkInLoading } = useCheckin();
 
 
   const handleCheckInOut = async () => {
     if (isCheckedIn) {
+      console.log('checking out')
       await checkOut();
     } else {
       // open QR scanner to perform a secure check-in via the printed gym QR
       navigation.navigate('QRScanner');
     }
-    try {
-      await currentActivity();
-    } catch (e) {
-      console.error('Failed to refresh activity after check-in/out', e);
-    }
   };
 
 
+  const handleRefresh = ()=> {
+    
+  }
 
   
 
@@ -56,7 +42,7 @@ export const DashboardScreen = ({ navigation }) => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isLoading || checkInLoading} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
+        refreshControl={<RefreshControl refreshing={checkInLoading} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -77,7 +63,7 @@ export const DashboardScreen = ({ navigation }) => {
                 {isCheckedIn ? "You're Checked In! 🔥" : 'Ready to Workout?'}
               </Text>
               <Text style={styles.checkInSubtitle}>
-                {isCheckedIn ? (gymName || 'Great job! Keep pushing!') : 'Check in to start your session'}
+                {isCheckedIn ? (lastCheckin?.gym_name || 'Great job! Keep pushing!') : 'Check in to start your session'}
               </Text>
             </View>
             <TouchableOpacity
@@ -93,22 +79,22 @@ export const DashboardScreen = ({ navigation }) => {
           {/* Expanded info when checked in */}
           {isCheckedIn && (
             <View style={styles.checkinDetails}>
-              {lastSlot ? (
+              {lastCheckin?.slot ? (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailIcon}>🕐</Text>
-                  <Text style={styles.detailText}>Slot: {lastSlot}</Text>
+                  <Text style={styles.detailText}>Slot: {lastCheckin.slot}</Text>
                 </View>
               ) : null}
-              {lastCheckinAt ? (
+              {lastCheckin?.started_at ? (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailIcon}>⏱️</Text>
-                  <Text style={styles.detailText}>Started: {formatTime(lastCheckinAt)}</Text>
+                  <Text style={styles.detailText}>Started: {formatTime(lastCheckin.started_at)}</Text>
                 </View>
               ) : null}
-              {lastBodyParts && lastBodyParts.length > 0 ? (
+              {lastCheckin?.body_parts && lastCheckin.body_parts.length > 0 ? (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailIcon}>💪</Text>
-                  <Text style={styles.detailText}>{lastBodyParts.join(', ')}</Text>
+                  <Text style={styles.detailText}>{lastCheckin.body_parts.join(', ')}</Text>
                 </View>
               ) : null}
             </View>

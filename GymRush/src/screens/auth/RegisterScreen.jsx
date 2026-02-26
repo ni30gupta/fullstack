@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Input } from '../../components';
 import { useForm } from '../../hooks';
-import { useAuth } from '../../context';
+import { useAuth } from '../../hooks';
 import { COLORS, SIZES } from '../../constants/theme';
 import { VALIDATION } from '../../constants/config';
 

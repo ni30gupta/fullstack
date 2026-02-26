@@ -5,6 +5,7 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [gymDetails, setGymDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -12,13 +13,22 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const token = localStorage.getItem('authToken');
     const storedUser = localStorage.getItem('user');
-    
+    const storedGym = localStorage.getItem('gymDetails');
+
     if (token && storedUser) {
       try {
         setUser(JSON.parse(storedUser));
       } catch {
         localStorage.removeItem('authToken');
         localStorage.removeItem('user');
+      }
+    }
+
+    if (storedGym) {
+      try {
+        setGymDetails(JSON.parse(storedGym));
+      } catch {
+        localStorage.removeItem('gymDetails');
       }
     }
     setLoading(false);
@@ -31,7 +41,7 @@ export const AuthProvider = ({ children }) => {
       
       const response = await authService.login(credentials);
       // Backend returns { user, tokens: { access, refresh }, message }
-      const { tokens, user: userData } = response.data;
+      const { tokens, user: userData, gym_details } = response.data;
       const accessToken = tokens?.access;
       
       if (!accessToken) {
@@ -40,6 +50,13 @@ export const AuthProvider = ({ children }) => {
       
       localStorage.setItem('authToken', accessToken);
       localStorage.setItem('user', JSON.stringify(userData));
+      if (gym_details) {
+        localStorage.setItem('gymDetails', JSON.stringify(gym_details));
+        setGymDetails(gym_details);
+      } else {
+        localStorage.removeItem('gymDetails');
+        setGymDetails(null);
+      }
       setUser(userData);
       
       return { success: true };
@@ -68,6 +85,9 @@ export const AuthProvider = ({ children }) => {
       
       localStorage.setItem('authToken', accessToken);
       localStorage.setItem('user', JSON.stringify(userData));
+      // registration won't return gym_details; clear any stale gymDetails
+      localStorage.removeItem('gymDetails');
+      setGymDetails(null);
       setUser(userData);
       
       return { success: true };
@@ -83,11 +103,14 @@ export const AuthProvider = ({ children }) => {
   const logout = useCallback(() => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('user');
+    localStorage.removeItem('gymDetails');
     setUser(null);
+    setGymDetails(null);
   }, []);
 
   const value = {
     user,
+    gymDetails,
     loading,
     error,
     isAuthenticated: !!user,

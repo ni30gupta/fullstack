@@ -18,7 +18,12 @@ export const gymService = {
   updateProfile: (data) => axiosInstance.patch(USER_ENDPOINTS.UPDATE_PROFILE, data),
   
   // Rush/Load data
-  getCurrentRush: (gym_id, dateStr) => axiosInstance.get(RUSH_ENDPOINTS.CURRENT(gym_id, dateStr)),
+  // optionally pass slot as third parameter; backend will filter if provided
+  getCurrentRush: (gym_id, dateStr, slot = 'current') => {
+    const url = RUSH_ENDPOINTS.CURRENT(gym_id, dateStr);
+    const params = slot ? { slot } : {};
+    return axiosInstance.get(url, { params });
+  },
   getSlotRush: (slotId) => axiosInstance.get(RUSH_ENDPOINTS.BY_SLOT(slotId)),
   getBodyPartLoad: (slotId = null) => {
     const params = slotId ? { slot: slotId } : {};

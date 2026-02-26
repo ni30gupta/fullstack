@@ -26,15 +26,17 @@ const GymRush = () => {
             const today = new Date();
             // strip to 'YYYY-MM-DD' format
             const dateStr = today.toISOString().split('T')[0];
-            const { data } = await getCurrentRush(dateStr);
+            const { data } = await getCurrentRush(dateStr, selectedSlot );
             if (!mounted) return;
             setGymRushData(data);
             setTotalLoad(getTotalBodyPartLoad(data));
         }
         load().catch(console.error);
         return () => { mounted = false; };
-    }, [getCurrentRush]);
+    }, [getCurrentRush, selectedSlot]);
     
+
+    const changes = gymRushdata?.time_slot[0]?.change || {};
 
     return (
         <div>
@@ -51,12 +53,13 @@ const GymRush = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-20 mb-6">
-                {gymRushdata && Object.entries(gymRushdata.time_slot[0].body_part_breakdown).map(([bodyPart, load]) => (
+                {gymRushdata?.time_slot[0] && Object.entries(gymRushdata.time_slot[0]?.body_part_breakdown)?.map(([bodyPart, load]) => (
                         <StatCard
                             key={bodyPart}
                             title={bodyPart}
                             value={load}
                             total_load={totalLoad}
+                            change={changes[bodyPart] || 0}
                         />
                     )   )
                 }
