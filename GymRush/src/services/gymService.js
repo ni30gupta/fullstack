@@ -54,6 +54,7 @@ export const gymService = {
 
       const payload = bodyParts && bodyParts.length ? { body_parts: bodyParts } : {};
       const response = await api.post(buildEndpoint(ENDPOINTS.GYM_CHECKIN, { id }), payload);
+      console.log('resssssss',response)
       return response.data;
     } catch (error) {
       throw handleError(error);
@@ -96,6 +97,57 @@ export const gymService = {
   async getMyActivity() {
     try {
       const response = await api.get(ENDPOINTS.GYMS_MY_ACTIVITY);
+      return response.data;
+    } catch (error) {
+      throw handleError(error);
+    }
+  },
+
+  async getCurrentRush(gymId, dateStr, slot = 'current') {
+    try {
+      if (!gymId) {
+        const info = await gymStorage.getGymInfo();
+        gymId = info?.gym_id;
+      }
+      if (!gymId) {
+        throw new Error('gym_id is required for getCurrentRush');
+      }
+
+      const params = { date: dateStr };
+      if (slot) params.slot = slot;
+
+      const response = await api.get(`/api/gyms/${encodeURIComponent(gymId)}/rush-data/`, { params });
+      try {
+        await gymStorage.saveCurrentRush({
+          gym_id: gymId,
+          date: dateStr,
+          slot,
+          data: response.data,
+          fetched_at: new Date().toISOString(),
+        });
+      } catch (e) {
+        // Ignore persistence failures and still return API data
+      }
+      return response.data;
+    } catch (error) {
+      throw handleError(error);
+    }
+  },
+
+  async getActiveActivities(gymId, bodyPart = null, dateStr, slot = 'current') {
+    try {
+      if (!gymId) {
+        const info = await gymStorage.getGymInfo();
+        gymId = info?.gym_id;
+      }
+      if (!gymId) {
+        throw new Error('gym_id is required for getActiveActivities');
+      }
+
+      const params = { date: dateStr, slot };
+      if (bodyPart) params.body_part = bodyPart;
+
+      const response = await api.get(`/api/gyms/${encodeURIComponent(gymId)}/active-activities/`, { params });
       return response.data;
     } catch (error) {
       throw handleError(error);

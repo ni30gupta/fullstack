@@ -1,5 +1,6 @@
 export const API_CONFIG = {
   BASE_URL: 'http://127.0.0.1:8000',
+  // BASE_URL: 'http://192.168.1.9:8000',
   TIMEOUT: 30000,
   VERSION: 'v1',
 };
@@ -8,8 +9,10 @@ export const STORAGE_KEYS = {
   AUTH_TOKEN: '@GymRush:authToken',
   REFRESH_TOKEN: '@GymRush:refreshToken',
   USER_PROFILE: '@GymRush:userProfile',
+  GYM_DETAILS: '@GymRush:gymDetails',
   GYM_INFO: '@GymRush:gymInfo',
-  ONBOARDING_COMPLETE: '@GymRush:onboardingComplete',
+  CURRENT_RUSH: '@GymRush:currentRush',
+  ACTIVE_MEMBERSHIP: '@GymRush:activeMembership',
   THEME_PREFERENCE: '@GymRush:themePreference',
 };
 

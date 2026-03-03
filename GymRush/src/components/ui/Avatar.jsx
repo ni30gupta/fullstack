@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { COLORS, SIZES } from '../../constants/theme';
 
 export const Avatar = ({ source, name, size = 'medium', style }) => {
@@ -31,6 +32,7 @@ export const Avatar = ({ source, name, size = 'medium', style }) => {
   };
 
   const dimension = getSize();
+  const iconSize = dimension * 0.6; // make icon proportionally larger when no initials
 
   if (source) {
     return (
@@ -43,7 +45,11 @@ export const Avatar = ({ source, name, size = 'medium', style }) => {
 
   return (
     <View style={[styles.placeholder, { width: dimension, height: dimension, borderRadius: dimension / 2 }, style]}>
-      <Text style={[styles.initials, { fontSize: getFontSize() }]}>{getInitials(name)}</Text>
+      {name ? (
+        <Text style={[styles.initials, { fontSize: getFontSize() }]}>{getInitials(name)}</Text>
+      ) : (
+        <Icon name="person" size={iconSize} color={COLORS.white} />
+      )}
     </View>
   );
 };

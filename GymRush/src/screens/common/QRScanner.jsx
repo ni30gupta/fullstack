@@ -9,7 +9,7 @@ import {
   Modal,
 } from 'react-native';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
-import { api, gymService } from '../../services';
+import { api, gymService, gymStorage } from '../../services';
 import { useCheckin } from '../../hooks';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SIZES } from '../../constants/theme';
@@ -75,8 +75,11 @@ export const QRScanner = ({ navigation }) => {
         const { buildEndpoint, ENDPOINTS } = await import('../../constants/config');
         const resp = await api.get(buildEndpoint(ENDPOINTS.GYM_DETAIL, { id: gid }));
         setGymPreview(resp.data);
+        // persist so mobile can later fetch rush even without membership
+        try { await gymStorage.saveGymInfo(resp.data); } catch (e) {}
       } catch (err) {
         setGymPreview({ gym_id: gid });
+        try { await gymStorage.saveGymInfo({ gym_id: gid }); } catch (e) {}
       }
     } else {
       setGymPreview(null);
@@ -108,12 +111,14 @@ export const QRScanner = ({ navigation }) => {
 
     setLoading(true);
     try {
-      // Prefer using gymService when we can extract a gym id so the
+      // prefer using gymService when we can extract a gym id so the
       // request goes through the app API client (ensures auth header).
       const gid = parseGymIdFromUrl(scannedData);
       let session = null;
       if (gid) {
         session = await gymService.checkIn(gid, selectedParts);
+        // store id in case preview was missing
+        try { await gymStorage.saveGymInfo({ gym_id: gid }); } catch (e) {}
       } else {
         // Fallback to posting the scanned URL directly
         const url = scannedData.startsWith('http') ? scannedData : scannedData;
@@ -184,14 +189,18 @@ export const QRScanner = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Top controls */}
+      {/* Top header */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.topButton}>
-          <Icon name="close" size={28} color={COLORS.white} />
-        </TouchableOpacity>
         <Text style={styles.topTitle}>Scan QR to Check In</Text>
-        <TouchableOpacity onPress={() => setFlash((f) => !f)} style={styles.topButton}>
-          <Icon name={flash ? 'flash-on' : 'flash-off'} size={24} color={COLORS.white} />
+      </View>
+
+      {/* Bottom controls (moved from top for easier reach) */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.bottomButton}>
+          <Icon name="close" size={32} color={COLORS.white} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setFlash((f) => !f)} style={styles.bottomButton}>
+          <Icon name={flash ? 'flash-on' : 'flash-off'} size={28} color={COLORS.white} />
         </TouchableOpacity>
       </View>
 
@@ -329,6 +338,22 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 10,
   },
+  bottomBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    position: 'absolute',
+    bottom: 30,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  bottomButton: {
+    padding: 12,
+  },
   topButton: {
     padding: 8,
   },
@@ -336,6 +361,9 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: SIZES.h4,
     fontWeight: '600',
+    textAlign: 'center',
+    flex: 1,
+    marginTop:20
   },
   cameraContainer: {
     flex: 1,
@@ -386,7 +414,7 @@ const styles = StyleSheet.create({
   },
   hintContainer: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 140,
     left: 0,
     right: 0,
     alignItems: 'center',

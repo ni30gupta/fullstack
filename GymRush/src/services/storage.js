@@ -74,9 +74,35 @@ export const authStorage = {
     await storage.remove(STORAGE_KEYS.USER_PROFILE);
   },
 
+  async saveMembership(membership) {
+    await storage.set(STORAGE_KEYS.ACTIVE_MEMBERSHIP, membership);
+  },
+
+  async getMembership() {
+    return await storage.get(STORAGE_KEYS.ACTIVE_MEMBERSHIP);
+  },
+
+  async clearMembership() {
+    await storage.remove(STORAGE_KEYS.ACTIVE_MEMBERSHIP);
+  },
+
+  async saveGymDetails(details) {
+    await storage.set(STORAGE_KEYS.GYM_DETAILS, details);
+  },
+
+  async getGymDetails() {
+    return await storage.get(STORAGE_KEYS.GYM_DETAILS);
+  },
+
+  async clearGymDetails() {
+    await storage.remove(STORAGE_KEYS.GYM_DETAILS);
+  },
+
   async clearAll() {
     await this.clearTokens();
     await this.clearUserProfile();
+    await this.clearMembership();
+    await this.clearGymDetails();
     await storage.remove(STORAGE_KEYS.GYM_INFO);
   },
 };
@@ -92,5 +118,17 @@ export const gymStorage = {
 
   async clearGymInfo() {
     await storage.remove(STORAGE_KEYS.GYM_INFO);
+  },
+
+  async saveCurrentRush(rushInfo) {
+    await storage.set(STORAGE_KEYS.CURRENT_RUSH, rushInfo);
+  },
+
+  async getCurrentRush() {
+    return await storage.get(STORAGE_KEYS.CURRENT_RUSH);
+  },
+
+  async clearCurrentRush() {
+    await storage.remove(STORAGE_KEYS.CURRENT_RUSH);
   },
 };

@@ -344,9 +344,9 @@ class GymViewSet(viewsets.ModelViewSet):
         gym = self.get_object()
 
         # Owner/staff only
-        if not (request.user.is_staff or gym.owner == request.user):
-            return Response({'detail': 'You do not have permission to view rush data.'},
-                            status=status.HTTP_403_FORBIDDEN)
+        # if not (request.user.is_staff or gym.owner == request.user):
+        #     return Response({'detail': 'You do not have permission to view rush data.'},
+        #                     status=status.HTTP_403_FORBIDDEN)
 
         date_str = request.query_params.get('date')
         if not date_str:
@@ -413,8 +413,15 @@ class GymViewSet(viewsets.ModelViewSet):
             body_part_name = act.body_part.name if act.body_part else 'UNKNOWN'
             prev_counts[body_part_name] += 1
 
+        # Ensure we always include all known body parts in the response,
+        # even if their count is zero for the requested slot.
+        all_body_parts = BodyPart.objects.all()
+        # Build full mappings that include zero-count parts
+        full_current = {bp.name: current_counts.get(bp.name, 0) for bp in all_body_parts}
+        full_prev = {bp.name: prev_counts.get(bp.name, 0) for bp in all_body_parts}
+
         from .utils import diff_body_part_counts
-        change = diff_body_part_counts(current_counts, prev_counts)
+        change = diff_body_part_counts(full_current, full_prev)
 
         # Format start/end in local time
         slot_start_local = slot_start_utc.astimezone(timezone.get_current_timezone())
@@ -422,8 +429,8 @@ class GymViewSet(viewsets.ModelViewSet):
         start_str = slot_start_local.strftime('%H:%M')
         end_str = slot_end_local.strftime('%H:%M')
 
-        # Sort body parts by descending count
-        sorted_breakdown = dict(sorted(current_counts.items(), key=lambda x: x[1], reverse=True))
+        # Sort body parts by descending count (include zero-count parts)
+        sorted_breakdown = dict(sorted(full_current.items(), key=lambda x: x[1], reverse=True))
 
         time_slot = [{
             'start': start_str,
@@ -436,6 +443,70 @@ class GymViewSet(viewsets.ModelViewSet):
             'date': date_str,
             'time_slot': time_slot
         })
+
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated], url_path='active-activities')
+    def active_activities(self, request, pk=None):
+        """Return a list of currently active activities for a given body part.
+
+        Primarily for gym owners; accepts ``date``, ``slot`` and optional
+        ``body_part`` query parameters.  See implementation in comments.
+        """
+        from django.utils import timezone
+        from datetime import datetime, timedelta
+
+        gym = self.get_object()
+
+        # only owner or staff allowed
+        if not (request.user.is_staff or gym.owner == request.user):
+            return Response({'detail': 'You do not have permission to view this data.'},
+                            status=status.HTTP_403_FORBIDDEN)
+
+        date_str = request.query_params.get('date')
+        if not date_str:
+            return Response({'detail': 'Query parameter "date" is required (YYYY-MM-DD).'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({'detail': 'Invalid date format. Use YYYY-MM-DD.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        slot_param = request.query_params.get('slot')
+        if slot_param not in ['current', 'next', 'next_to_next']:
+            return Response({'detail': 'Query parameter "slot" must be one of: current, next, next_to_next.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        body_part_filter = request.query_params.get('body_part')
+
+        from .utils import parse_slot_param
+        slot_start_utc, slot_end_utc = parse_slot_param(target_date, slot_param)
+        if not slot_start_utc or not slot_end_utc:
+            return Response({'detail': 'Invalid slot parameter.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        qs = GymActivity.objects.filter(
+            gym=gym,
+            started_at__gte=slot_start_utc,
+            started_at__lt=slot_end_utc,
+        ).filter(
+            Q(ended_at__isnull=True) | Q(ended_at__gte=slot_end_utc)
+        ).select_related('user', 'body_part')
+
+        if body_part_filter:
+            qs = qs.filter(body_part__name=body_part_filter)
+
+        results = []
+        for act in qs:
+            results.append({
+                'activity_id': act.id,
+                'user_id': act.user.id,
+                'username': act.user.username,
+                'avatar_url': getattr(act.user, 'avatar', None),
+                'started_at': act.started_at.isoformat(),
+                'body_part': act.body_part.name if act.body_part else None,
+            })
+
+        return Response(results)
 
 
 class MyActivityView(APIView):

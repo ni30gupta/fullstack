@@ -1,9 +1,11 @@
 
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card, Avatar } from '../../components';
-import { useAuth, useCheckin } from '../../hooks';
+import { Card, Avatar, GymRush } from '../../components';
+import { useAuth, useCheckin, useBodyPartLoad } from '../../hooks';
+import { gymService } from '../../services';
 import { COLORS, SIZES } from '../../constants/theme';
+import { useState, useEffect } from 'react';
 
 
 // Format time from ISO string
@@ -17,8 +19,19 @@ const formatTime = (isoStr) => {
 
 export const DashboardScreen = ({ navigation }) => {
   const { user } = useAuth();
-  const { lastCheckin, checkedIn: isCheckedIn, checkIn, checkOut, loading: checkInLoading } = useCheckin();
+  // lastCheckin / isCheckedIn reflect the "my-activity" endpoint result
+  const { lastCheckin, checkedIn: isCheckedIn, checkIn, checkOut, loading: checkInLoading, setCheckin } = useCheckin();
+  const { getCurrentRush, loading: rushLoading } = useBodyPartLoad();
+  const [selectedParts, setSelectedParts] = useState([]);
 
+  useEffect(() => {
+    if (isCheckedIn) {
+      setSelectedParts([]);
+    }
+  }, [isCheckedIn]);
+
+  const { activeGymId } = useAuth()
+  console.log(activeGymId)
 
   const handleCheckInOut = async () => {
     if (isCheckedIn) {
@@ -30,54 +43,78 @@ export const DashboardScreen = ({ navigation }) => {
     }
   };
 
+  // navigate to profile using root navigator so back returns to dashboard
+  const goToProfile = () => {
+    // attempt to reach the root navigator
+    const parent = navigation.getParent();
+    const root = parent?.getParent() || parent;
+    if (root && root.navigate) {
+      root.navigate('ProfileRoot');
+    } else {
+      navigation.navigate('ProfileRoot');
+    }
+  };
 
-  const handleRefresh = ()=> {
-    
+
+const handleRefresh = async () => {
+    // refresh "my activity" state and rush data
+    try {
+      const session = await gymService.getMyActivity();
+      if (session && Object.keys(session).length > 0) {
+        await setCheckin(session);
+      } else {
+        await clearCheckin();
+      }
+    } catch (e) {
+      console.warn('refresh my-activity failed', e);
+    }
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      await getCurrentRush(today);
+    } catch (e) {
+      console.warn('refresh rush-data failed', e);
+    }
   }
-
   
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.greetingSingle}>Hello, {user?.username || 'Member'} 👋</Text>
+        <TouchableOpacity onPress={goToProfile}>
+          <Avatar source={user?.avatar } name={user?.name} size="small" />
+        </TouchableOpacity>
+      </View>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={checkInLoading} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
+        refreshControl={<RefreshControl refreshing={checkInLoading || rushLoading} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.greeting}>
-            <Text style={styles.greetingText}>Hello,</Text>
-            <Text style={styles.userName}>{user?.username || 'Member'} 👋</Text>
-          </View>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-            <Avatar source={user?.avatar} name={user?.name} size="medium" />
-          </TouchableOpacity>
-        </View>
 
-        {/* Check-in Card */}
-        <Card style={styles.checkInCard}>
-          <View style={styles.checkInContent}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.checkInTitle}>
-                {isCheckedIn ? "You're Checked In! 🔥" : 'Ready to Workout?'}
-              </Text>
-              <Text style={styles.checkInSubtitle}>
-                {isCheckedIn ? (lastCheckin?.gym_name || 'Great job! Keep pushing!') : 'Check in to start your session'}
-              </Text>
+        {/* Check-in heading/card area */}
+        {isCheckedIn ? (
+          <Card style={styles.checkInCard}>
+            <View style={styles.checkInContent}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.checkInTitle}>
+                  You're Checked In! 🔥
+                </Text>
+                <Text style={styles.checkInSubtitle}>
+                  {lastCheckin?.gym_name || 'Great job! Keep pushing!'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.checkInButton, styles.checkOutButton]}
+                onPress={handleCheckInOut}
+                disabled={checkInLoading}
+              >
+                <Text style={styles.checkInButtonText}>
+                  {checkInLoading ? '...' : 'Check Out'}
+                </Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={[styles.checkInButton, isCheckedIn && styles.checkOutButton]}
-              onPress={handleCheckInOut}
-              disabled={checkInLoading}
-            >
-              <Text style={styles.checkInButtonText}>
-                {checkInLoading ? '...' : isCheckedIn ? 'Check Out' : 'Check In'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {/* Expanded info when checked in */}
-          {isCheckedIn && (
             <View style={styles.checkinDetails}>
               {lastCheckin?.slot ? (
                 <View style={styles.detailRow}>
@@ -98,28 +135,38 @@ export const DashboardScreen = ({ navigation }) => {
                 </View>
               ) : null}
             </View>
-          )}
-        </Card>
+          </Card>
+        ) : (
+          <Text style={styles.sectionTitle}>Choose body parts to check in</Text>
+        )}
 
-        {/* Stats and membership removed — backend has no /dashboard endpoint */}
+        {/* show gym rush load only when there is no active session */}
+        {!isCheckedIn && <GymRush onSelectionChange={setSelectedParts} />}
 
-        {/* Quick Actions */}
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate('Workouts')}>
-            <Text style={styles.quickActionIcon}>🏋️</Text>
-            <Text style={styles.quickActionText}>Workouts</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate('Trainers')}>
-            <Text style={styles.quickActionIcon}>👨‍🏫</Text>
-            <Text style={styles.quickActionText}>Trainers</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate('Profile')}>
-            <Text style={styles.quickActionIcon}>📊</Text>
-            <Text style={styles.quickActionText}>Progress</Text>
+        
+      </ScrollView>
+      {/* fixed bottom bar with selected body parts and check-in button */}
+      {selectedParts.length > 0 && !isCheckedIn && (
+        <View style={styles.checkinBar}>
+          <Text style={styles.checkinParts} numberOfLines={1} ellipsizeMode="tail">
+            {selectedParts.join(', ')}
+          </Text>
+          <TouchableOpacity
+            style={[styles.checkInButton, styles.checkinBarButton]}
+            onPress={async () => {
+              try {
+                await checkIn(activeGymId, selectedParts);
+              } catch (e) {}
+              setSelectedParts([]);
+            }}
+            disabled={checkInLoading}
+          >
+            <Text style={styles.checkInButtonText}>
+              {checkInLoading ? '...' : 'Check In'}
+            </Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
@@ -130,15 +177,23 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   scrollContent: {
-    padding: SIZES.padding,
+    // padding: SIZES.padding,
     paddingBottom: SIZES.paddingLarge * 2,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SIZES.marginLarge,
+    padding: SIZES.padding,
+    backgroundColor: COLORS.card,
   },
+  /* greetingRow no longer required - header flex handles layout */
+  greetingSingle: {
+    fontSize: SIZES.h5,
+    color: COLORS.text,
+    fontWeight: '600',
+  },
+  /* legacy styles kept for reference but no longer used */
   greeting: {},
   greetingText: {
     fontSize: SIZES.body,
@@ -204,16 +259,58 @@ const styles = StyleSheet.create({
     fontSize: SIZES.body,
   },
   sectionTitle: {
-    fontSize: SIZES.h4,
+    fontSize: SIZES.body,
     fontWeight: '700',
     color: COLORS.text,
-    marginTop: SIZES.margin,
-    marginBottom: SIZES.paddingSmall,
+    marginVertical: SIZES.paddingSmall,
+    textAlign: 'center',
   },
   statsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: SIZES.base,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: SIZES.padding,
+    right: SIZES.padding,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SIZES.paddingSmall,
+    paddingVertical: SIZES.paddingSmall,
+    borderRadius: SIZES.radiusLarge,
+    elevation: 6,
+    zIndex: 20,
+  },
+  fabText: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: SIZES.bodySmall,
+  },
+  /* bottom bar when there are selected parts */
+  checkinBar: {
+    position: 'absolute',
+    bottom: SIZES.padding,
+    left: SIZES.padding,
+    right: SIZES.padding,
+    backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SIZES.padding,
+    paddingVertical: SIZES.paddingSmall,
+    borderRadius: SIZES.radiusLarge,
+    elevation: 6,
+    zIndex: 20,
+  },
+  checkinParts: {
+    flex: 1,
+    color: COLORS.white,
+    fontSize: SIZES.body,      // larger size
+    fontWeight: '600',        // bolder
+    marginRight: SIZES.padding,
+  },
+  checkinBarButton: {
+    backgroundColor: COLORS.secondary,
+    paddingHorizontal: SIZES.padding,
+    paddingVertical: SIZES.paddingSmall,
+    borderRadius: SIZES.radius,
   },
   statCard: {
     flex: 1,

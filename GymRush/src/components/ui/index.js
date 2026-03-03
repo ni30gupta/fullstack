@@ -5,3 +5,4 @@ export { Avatar } from './Avatar';
 export { Loading } from './Loading';
 export { Badge } from './Badge';
 export { StatCard } from './StatCard';
+export { GymRush } from './GymRush';

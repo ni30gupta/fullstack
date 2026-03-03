@@ -4,9 +4,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
 import QRScanner from '../screens/common/QRScanner';
+import BodyPartActivitiesScreen from '../screens/main/BodyPartActivitiesScreen';
 import { useAuth } from '../hooks';
 import { Loading } from '../components';
 import { COLORS } from '../constants/theme';
+import { ProfileScreen } from '../screens';
 
 const Stack = createNativeStackNavigator();
 
@@ -44,6 +46,10 @@ export const RootNavigator = () => {
           <>
             <Stack.Screen name="Main" component={MainNavigator} />
             <Stack.Screen name="QRScanner" component={QRScanner} />
+            <Stack.Screen name="BodyPartActivities" component={BodyPartActivitiesScreen} />
+            {/* include Profile */}
+            {/* root-level profile screen; name unique to avoid tab collision */}
+            <Stack.Screen name="ProfileRoot" component={ProfileScreen} />
           </>
         ) : (
           <Stack.Screen name="Auth" component={AuthNavigator} />

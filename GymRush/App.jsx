@@ -28,8 +28,7 @@ class ErrorBoundary extends React.Component {
 const App = () => {
   return (
     <ErrorBoundary>
-      <SafeAreaProvider>
-        
+      <SafeAreaProvider>        
         <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
         <AuthProvider>
           <CheckinProvider>

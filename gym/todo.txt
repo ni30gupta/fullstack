@@ -3,3 +3,13 @@
 2. add geo fencing,in checkin, also track if already checkid in, in backend,
 
 3. map user to single device, means only device can be logged in at a time
+
+
+
+
+
+features:
+Attendance - record
+track fees pending
+send fees reminder
+time based billing - pay as you use

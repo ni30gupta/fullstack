@@ -167,3 +167,102 @@ class GymActivity(models.Model):
         self.ended_at = ended_at or timezone.now()
         self.save(update_fields=['ended_at'])
         return True
+
+
+class MemberPoints(models.Model):
+    """Aggregated leaderboard points for each member per gym."""
+    membership = models.OneToOneField(
+        Membership,
+        on_delete=models.CASCADE,
+        related_name='points'
+    )
+    total_points = models.IntegerField(default=0)
+    streak_days = models.PositiveIntegerField(default=0)  # Consecutive days attended
+    last_activity_date = models.DateField(null=True, blank=True)  # For streak tracking
+    rank = models.PositiveIntegerField(null=True, blank=True)  # Cached rank (updated periodically)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'member_points'
+        indexes = [
+            models.Index(fields=['total_points']),
+            models.Index(fields=['rank']),
+        ]
+
+    def __str__(self):
+        return f"{self.membership.user.username} - {self.total_points} pts"
+
+    def add_points(self, points, reason, description='', activity=None):
+        """Add points and create a transaction record."""
+        self.total_points += points
+        self.save(update_fields=['total_points', 'updated_at'])
+        
+        return PointTransaction.objects.create(
+            member_points=self,
+            activity=activity,
+            points=points,
+            reason=reason,
+            description=description
+        )
+
+    def update_streak(self, activity_date):
+        """Update streak based on activity date."""
+        from datetime import timedelta
+        
+        if self.last_activity_date is None:
+            self.streak_days = 1
+        elif activity_date == self.last_activity_date:
+            # Same day, no change
+            return
+        elif activity_date == self.last_activity_date + timedelta(days=1):
+            # Consecutive day
+            self.streak_days += 1
+        else:
+            # Streak broken
+            self.streak_days = 1
+        
+        self.last_activity_date = activity_date
+        self.save(update_fields=['streak_days', 'last_activity_date', 'updated_at'])
+
+
+class PointTransaction(models.Model):
+    """Historical record of all point changes."""
+    REASON_CHOICES = (
+        ('CHECKIN', 'Daily Check-in'),
+        ('PREFERRED_SLOT', 'Preferred Slot Bonus'),
+        ('STREAK_7', '7-Day Streak Bonus'),
+        ('STREAK_30', '30-Day Streak Bonus'),
+        ('WEEKLY_CONSISTENCY', 'Weekly Consistency Bonus'),
+        ('EXERCISE_VIOLATION', 'Exercise Violation Report'),
+        ('VERIFIED_VIOLATION', 'Verified Exercise Violation'),
+        ('MANUAL_ADJUSTMENT', 'Manual Adjustment'),
+    )
+
+    member_points = models.ForeignKey(
+        MemberPoints,
+        on_delete=models.CASCADE,
+        related_name='transactions'
+    )
+    activity = models.ForeignKey(
+        GymActivity,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='point_transactions'
+    )
+    points = models.IntegerField()  # Can be positive or negative
+    reason = models.CharField(max_length=30, choices=REASON_CHOICES)
+    description = models.TextField(blank=True)  # Optional details
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'point_transaction'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['member_points', 'created_at']),
+            models.Index(fields=['reason']),
+        ]
+
+    def __str__(self):
+        sign = '+' if self.points >= 0 else ''
+        return f"{self.member_points.membership.user.username}: {sign}{self.points} ({self.reason})"

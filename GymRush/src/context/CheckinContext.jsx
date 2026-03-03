@@ -80,7 +80,8 @@ export function CheckinProvider({ children }) {
   // setCheckin expects a full session object (the API response)
   const setCheckin = useCallback(async (session) => {
       try {
-      if (!session || typeof session !== 'object') {
+      // ignore null/undefined and empty objects (no active session)
+      if (!session || typeof session !== 'object' || Object.keys(session).length === 0) {
         return;
       }
       dispatch({ type: 'SET_CHECKIN', payload: session });
@@ -105,6 +106,7 @@ export function CheckinProvider({ children }) {
     setLoading(true); setError(null);
     try {
       const session = await gymService.checkIn(gymId, bodyParts);
+      console.log('session..............',session)
       await setCheckin(session);
       return session;
     } catch (e) {
@@ -120,16 +122,25 @@ export function CheckinProvider({ children }) {
     try {
       let res;
       if (sessionId) {
-        console.log('CheckinContext.checkOut: calling gymService.checkOut with id', sessionId);
         res = await gymService.checkOut(sessionId);
       } else {
-        console.log('CheckinContext.checkOut: calling gymService.checkOut (bulk for current gym)');
         res = await gymService.checkOut();
       }
-      console.log('CheckinContext.checkOut: gymService.checkOut response', res);
       // clear local checkin state when we've successfully checked out
       await clearCheckin();
       console.log('CheckinContext.checkOut: cleared local checkin state');
+      // double-check server; fetch fresh activity data and update if necessary
+      try {
+        const fresh = await gymService.getMyActivity();
+        if (fresh && Object.keys(fresh).length > 0) {
+          console.log('CheckinContext.checkOut: server still reports active session, updating state');
+          dispatch({ type: 'SET_CHECKIN', payload: fresh });
+        } else {
+          console.log('CheckinContext.checkOut: server reports no active session');
+        }
+      } catch (err) {
+        console.warn('CheckinContext.checkOut: refresh after checkout failed', err);
+      }
       return res;
     } catch (e) {
       console.error('CheckinContext.checkOut error', e);
