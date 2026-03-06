@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { COLORS, SIZES } from '../../constants/theme';
 
-export const Badge = ({ label, variant = 'primary', size = 'medium', style }) => {
+export const Badge = ({ label, variant = 'primary', size = 'medium', style, icon, iconPosition = 'left' }) => {
   const getVariantStyle = () => {
     switch (variant) {
       case 'primary':
@@ -36,9 +36,11 @@ export const Badge = ({ label, variant = 'primary', size = 'medium', style }) =>
 
   return (
     <View style={[styles.badge, getVariantStyle(), size === 'small' && styles.badgeSmall, style]}>
+      {icon && iconPosition === 'left' && <Text style={styles.icon}>{icon}</Text>}
       <Text style={[styles.label, { color: getTextColor() }, size === 'small' && styles.labelSmall]}>
         {label}
       </Text>
+      {icon && iconPosition === 'right' && <Text style={styles.icon}>{icon}</Text>}
     </View>
   );
 };
@@ -61,6 +63,10 @@ const styles = StyleSheet.create({
   },
   labelSmall: {
     fontSize: SIZES.caption,
+  },
+  icon: {
+    marginHorizontal: 4,
+    fontSize: SIZES.bodySmall,
   },
 });
 

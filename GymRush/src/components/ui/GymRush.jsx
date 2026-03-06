@@ -1,6 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useBodyPartLoad, useCheckin, useAuth } from '../../hooks';
+
+// load body part images; require must use literals so we enumerate them
+const partImages = {
+  CHEST: require('../../assets/body_parts/chest.jpeg'),
+  BACK: require('../../assets/body_parts/back.jpeg'),
+  LEGS: require('../../assets/body_parts/legs.jpeg'),
+  SHOULDER: require('../../assets/body_parts/shoulder.jpeg'),
+  CARDIO: require('../../assets/body_parts/cardio.jpeg'),
+  ARMS: require('../../assets/body_parts/arms.jpeg'),
+  BICEPS: require('../../assets/body_parts/biceps.jpeg'),
+  TRICEPS: require('../../assets/body_parts/triceps.jpeg'),
+  ABS: require('../../assets/body_parts/abs.jpeg'),
+  MIXED: require('../../assets/body_parts/mixed.jpeg'),
+};
 import useSlots from '../../hooks/useSlots';
 import { StatCard } from './StatCard';
 import { COLORS, SIZES } from '../../constants/theme';
@@ -31,6 +45,11 @@ export const GymRush = ({ onSelectionChange }) => {
   const togglePart = (part) => {
     setSelectedParts((prev) => {
       if (prev.includes(part)) return prev.filter((p) => p !== part);
+      // limit to 2 parts
+      if (prev.length >= 2) {
+        Alert.alert('Limit reached', 'You can only select up to two body parts for check-in.');
+        return prev;
+      }
       return [...prev, part];
     });
   };
@@ -40,10 +59,19 @@ export const GymRush = ({ onSelectionChange }) => {
     if (onSelectionChange) onSelectionChange(selectedParts);
   }, [selectedParts, onSelectionChange]);
 
+  const defaultParts = ['CHEST','BACK','LEGS','SHOULDER','CARDIO','ARMS','BICEPS','TRICEPS','ABS','MIXED'];
+
   useEffect(() => {
     console.log('use effect')
     setTotalLoad(getTotalBodyPartLoad(gymRushData));
   }, [gymRushData]);
+
+  const partsToRender = () => {
+    if (gymRushData?.time_slot?.[0]) {
+      return Object.entries(gymRushData.time_slot[0].body_part_breakdown || {});
+    }
+    return defaultParts.map((p) => [p, 0]);
+  };
 
   useEffect(() => {
     // clear selected parts if we become checked in or rush data resets
@@ -112,7 +140,7 @@ export const GymRush = ({ onSelectionChange }) => {
       {/* header with total load and slot selector */}
       <View style={styles.headerRow}>
         <View>
-          <Text style={styles.smallLabel}>Total Load</Text>
+          <Text style={styles.smallLabel}>Total</Text>
           <Text style={styles.total}>{totalLoad}</Text>
         </View>
         {renderSlotSelector()}
@@ -120,9 +148,7 @@ export const GymRush = ({ onSelectionChange }) => {
 
       {/* body part stats grid */}
       <View style={styles.grid}>
-        {gymRushData?.time_slot?.[0] &&
-          Object.entries(gymRushData.time_slot[0].body_part_breakdown || {}).map(
-            ([bodyPart, load]) => {
+        {partsToRender().map(([bodyPart, load]) => {
               const isSelected = selectedParts.includes(bodyPart);
               return (
                 <StatCard
@@ -131,8 +157,9 @@ export const GymRush = ({ onSelectionChange }) => {
                   value={load}
                   total_load={totalLoad}
                   change={
-                    gymRushData.time_slot[0].change?.[bodyPart] || 0
+                    gymRushData?.time_slot?.[0]?.change?.[bodyPart] || 0
                   }
+                  iconSource={partImages[bodyPart]}
                   style={[styles.statCard, isSelected && styles.selectedCard]}
                   onPress={() => {
                     if (isOwner) {
@@ -145,8 +172,7 @@ export const GymRush = ({ onSelectionChange }) => {
                   }}
                 />
               );
-            }
-          )}
+        })}
       </View>
 
       {error && <Text style={styles.error}>Error loading data</Text>}

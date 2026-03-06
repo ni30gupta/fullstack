@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card, Avatar, Badge, Button } from '../../components';
 import { useAuth } from '../../hooks';
 import { COLORS, SIZES } from '../../constants/theme';
+import { useNavigation } from '@react-navigation/native';
 
 const MenuItem = ({ icon, title, subtitle, onPress, showBadge, badgeCount }) => (
   <TouchableOpacity style={styles.menuItem} onPress={onPress}>
@@ -24,7 +25,8 @@ const MenuItem = ({ icon, title, subtitle, onPress, showBadge, badgeCount }) => 
 );
 
 export const ProfileScreen = () => {
-  const { user, logout } = useAuth();
+  const { user, membership, logout } = useAuth();
+  const navigation = useNavigation();
 
   const handleLogout = () => {
     Alert.alert(
@@ -37,8 +39,27 @@ export const ProfileScreen = () => {
     );
   };
 
+  const membershipLabel = membership
+    ? membership.is_active
+      ? 'Active Member'
+      : 'Pending Membership'
+    : 'No Membership';
+  const membershipVariant = membership
+    ? membership.is_active
+      ? 'primary'
+      : 'secondary'
+    : 'ghost';
+  const membershipIcon = membership
+    ? membership.is_active
+      ? '🏅'
+      : '⏳'
+    : '⚪️';
+
   const handleMenuItem = (item) => {
-    // Handle navigation or actions for menu items
+    if (item === 'Edit Profile') {
+      navigation.navigate('EditProfile');
+      return;
+    }
     Alert.alert('Coming Soon', `${item} feature is coming soon!`);
   };
 
@@ -50,7 +71,13 @@ export const ProfileScreen = () => {
           <Avatar source={user?.avatar} name={user?.name} size="xlarge" />
           <Text style={styles.userName}>{user?.name || 'Member'}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
-          <Badge label="Premium Member" variant="primary" style={styles.membershipBadge} />
+          <Badge
+            label={membershipLabel}
+            variant={membershipVariant}
+            style={styles.membershipBadge}
+            icon={membershipIcon}
+            iconPosition="left"
+          />
         </View>
 
         {/* Stats Card */}
@@ -187,6 +214,9 @@ const styles = StyleSheet.create({
   },
   membershipBadge: {
     marginTop: SIZES.base,
+    paddingHorizontal: SIZES.padding,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   statsCard: {
     marginBottom: SIZES.margin,

@@ -4,6 +4,7 @@ const ENDPOINTS = {
   // Auth
   AUTH_LOGIN: '/api/auth/login/',
   AUTH_REGISTER: '/api/auth/register/',
+  AUTH_REGISTER_GYM: '/api/auth/register-gym/',
   AUTH_LOGOUT: '/api/auth/logout/',
   AUTH_PROFILE: '/api/auth/profile/',
   AUTH_FORGOT_PASSWORD: '/api/auth/forgot-password/',

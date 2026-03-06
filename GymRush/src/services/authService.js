@@ -54,6 +54,15 @@ export const authService = {
     }
   },
 
+  async registerGym(data) {
+    try {
+      const response = await api.post(ENDPOINTS.AUTH_REGISTER_GYM, data);
+      return response.data;
+    } catch (error) {
+      throw handleError(error);
+    }
+  },
+
   async logout() {
     try {
       await api.post(ENDPOINTS.AUTH_LOGOUT);
@@ -82,6 +91,15 @@ export const authService = {
     }
   },
 
+  async updateUserProfile(data) {
+    try {
+      const response = await api.patch(ENDPOINTS.AUTH_USER_PROFILE, data);
+      return response.data;
+    } catch (error) {
+      throw handleError(error);
+    }
+  },
+
   async forgotPassword(email) {
     try {
       await api.post(ENDPOINTS.AUTH_FORGOT_PASSWORD, { email });
@@ -91,10 +109,12 @@ export const authService = {
   },
 
   async checkAuthStatus() {
-    // Try to fetch current profile from server to validate auth.
+    // Try to fetch current profile/membership from server to validate auth.
     try {
-      const profile = await this.getProfile();
-      return { isAuthenticated: true, user: profile, tokens: null };
+      const profileResp = await this.getProfile();
+      // profileResp now contains { user, active_membership, gym_details } if valid
+      const { user, active_membership = null, gym_details = null } = profileResp;
+      return { isAuthenticated: true, user, active_membership, gym_details, tokens: null };
     } catch (error) {
       return { isAuthenticated: false, user: null };
     }

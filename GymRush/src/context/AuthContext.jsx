@@ -1,13 +1,15 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
+import React, { createContext, useReducer, useEffect, useCallback, useRef, useMemo } from 'react';
 import { authService, authStorage } from '../services';
 import { setAuthToken, clearAuthToken } from '../services/authToken';
 
-// Initial state - split into auth, user and membership slices
+// Initial state
 const initialState = {
-  auth: { isAuthenticated: false, token: null },
+  isAuthenticated: false,
+  token: null,
   user: null,
   membership: null,
-  gymDetails: null,           // for owners
+  gymDetails: null,
+  isOwner: false,
   isLoading: true,
   error: null,
   activeGymId: null,
@@ -19,41 +21,29 @@ function authReducer(state, action) {
     case 'SET_LOADING':
       return { ...state, isLoading: action.payload };
     
-      case 'SET_AUTH':
-      return { ...state, auth: { ...state.auth, ...action.payload }, error: null };
+    case 'SET_TOKENS':
+      return { ...state, isAuthenticated: true, token: action.payload, error: null };
     
-      case 'CLEAR_AUTH':
+    case 'SET_PROFILE':
       return {
         ...state,
-        auth: { isAuthenticated: false, token: null },
-        user: null,
-        membership: null,
-        gymDetails: null,
-        error: null,
+        user: { ...action.payload.user, profile: action.payload.profile },
+        membership: action.payload.active_membership ?? null,
+        gymDetails: action.payload.gym_details ?? null,
+        isOwner: action.payload.is_owner ?? false,
+        activeGymId: action.payload.active_membership?.gym_id ?? action.payload.gym_details?.id ?? state.activeGymId,
       };
     
-      case 'SET_USER':
-      return {
-        ...state,
-        user: action.payload?.user ?? action.payload,
-      };
+    case 'CLEAR_AUTH':
+      return { ...initialState, isLoading: false };
     
-      case 'SET_MEMBERSHIP':
-      return { ...state, membership: action.payload, activeGymId: action.payload?.gym_id ?? state.activeGymId };
-      case 'SET_GYM_DETAILS':
-      // owners get a gym_details object instead of active_membership
-      return { ...state, gymDetails: action.payload, activeGymId: action.payload?.id ?? state.activeGymId };
-    
-      case 'SET_ERROR':
+    case 'SET_ERROR':
       return { ...state, error: action.payload, isLoading: false };
     
-      case 'CLEAR_ERROR':
+    case 'CLEAR_ERROR':
       return { ...state, error: null };
     
-      case 'SET_ACTIVE_GYM':
-      return { ...state, activeGymId: action.payload };
-    
-      default:
+    default:
       return state;
   }
 }
@@ -64,227 +54,188 @@ const AuthContext = createContext(undefined);
 // Provider component
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
+  const isFetchingProfile = useRef(false);
 
-  // Check auth status on mount
-  useEffect(() => {
-    checkAuthStatus();
+  // Helper: persist tokens and update state
+  const saveTokens = useCallback(async (access, refresh) => {
+    setAuthToken(access);
+    await authStorage.saveTokens(access, refresh);
+    dispatch({ type: 'SET_TOKENS', payload: access });
   }, []);
 
-  const checkAuthStatus = async () => {
+  // Helper: persist profile data to storage
+  const persistProfile = useCallback(async (profileData) => {
+    const { user, active_membership, gym_details } = profileData;
+    await Promise.all([
+      user && authStorage.saveUserProfile(user),
+      active_membership && authStorage.saveMembership(active_membership),
+      gym_details && authStorage.saveGymDetails(gym_details),
+    ].filter(Boolean));
+  }, []);
+
+  // Fetch profile from server
+  const fetchProfile = useCallback(async () => {
+    if (isFetchingProfile.current) return;
+    isFetchingProfile.current = true;
+    
+    try {
+      const profileData = await authService.getProfile();
+      dispatch({ type: 'SET_PROFILE', payload: profileData });
+      await persistProfile(profileData);
+      return profileData;
+    } finally {
+      isFetchingProfile.current = false;
+    }
+  }, [persistProfile]);
+
+  // Initialize auth on mount
+  const initializeAuth = useCallback(async () => {
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      const storedUser = await authStorage.getUserProfile();
       const token = await authStorage.getAuthToken();
-      const membership = await authStorage.getMembership();
-      const gymDetails = await authStorage.getGymDetails();
-
-      if (!token || !storedUser) {
+      if (!token) {
         dispatch({ type: 'CLEAR_AUTH' });
         return;
       }
 
-      // offline-first: load whatever we have
-      try { setAuthToken(token); } catch (e) {}
-      dispatch({ type: 'SET_AUTH', payload: { isAuthenticated: true, token } });
-      dispatch({ type: 'SET_USER', payload: storedUser });
-      if (membership) {
-        dispatch({ type: 'SET_MEMBERSHIP', payload: membership });
-      }
-      if (gymDetails) {
-        dispatch({ type: 'SET_GYM_DETAILS', payload: gymDetails });
+      setAuthToken(token);
+      dispatch({ type: 'SET_TOKENS', payload: token });
+      
+      // Load cached data (offline-first)
+      const [user, membership, gymDetails] = await Promise.all([
+        authStorage.getUserProfile(),
+        authStorage.getMembership(),
+        authStorage.getGymDetails(),
+      ]);
+      
+      if (user) {
+        dispatch({ 
+          type: 'SET_PROFILE', 
+          payload: { user, active_membership: membership, gym_details: gymDetails, is_owner: !!gymDetails }
+        });
       }
 
-      // optionally refresh from server (non-blocking)
+      // Refresh from server
       try {
-        const result = await authService.checkAuthStatus();
-        if (result?.isAuthenticated && result?.tokens?.access) {
-          try { setAuthToken(result.tokens.access); } catch (e) {}
-          dispatch({ type: 'SET_AUTH', payload: { token: result.tokens.access, isAuthenticated: true } });
-          try { await authStorage.saveTokens(result.tokens.access, result.tokens.refresh); } catch (e) {}
+        await fetchProfile();
+      } catch (e) {
+        if (e.message?.includes('401') || e.message?.includes('Unauthorized')) {
+          await authStorage.clearAll();
+          dispatch({ type: 'CLEAR_AUTH' });
         }
-        if (result?.user) {
-          dispatch({ type: 'SET_USER', payload: result.user });
-        }
-        if (result?.active_membership) {
-          dispatch({ type: 'SET_MEMBERSHIP', payload: result.active_membership });
-          try { await authStorage.saveMembership(result.active_membership); } catch (e) {}
-        }
-        if (result?.gym_details) {
-          dispatch({ type: 'SET_GYM_DETAILS', payload: result.gym_details });
-          try { await authStorage.saveGymDetails(result.gym_details); } catch (e) {}
-        }
-      } catch (error) {
-        // ignore server validation failure
       }
     } catch (error) {
-      console.error('Auth check error:', error);
+      console.error('Auth init error:', error);
       dispatch({ type: 'CLEAR_AUTH' });
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  };
+  }, [fetchProfile]);
 
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
+
+  // Auth actions
   const login = useCallback(async (username, password) => {
     dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: 'CLEAR_ERROR' });
+    
     try {
-      // assume backend returns { user, token, active_membership }
-      const res = await authService.login({ username, password });
-    // backend may return {token} or {tokens: {access,refresh}}
-    const user = res?.user ?? null;
-    const rawToken = res?.token ?? res?.tokens?.access ?? null;
-    const active_membership = res?.active_membership ?? null;
-    const message = res?.message;
-
-    if (!user || !rawToken) {
-      const errMsg = message || 'Invalid credentials';
-      dispatch({ type: 'SET_ERROR', payload: errMsg });
-      return { success: false, message: errMsg };
-    }
-    const token = rawToken; // normalized name
-
-      // persist token + user + membership
-      try { setAuthToken(token); } catch (e) {}
-      try { await authStorage.saveTokens(token); } catch (e) {}
-      try { await authStorage.saveUserProfile(user); } catch (e) {}
-      if (active_membership) {
-        try { await authStorage.saveMembership(active_membership); } catch (e) {}
-      }
-      if (res?.gym_details) {
-        try { await authStorage.saveGymDetails(res.gym_details); } catch (e) {}
+      const tokens = await authService.login({ username, password });
+      if (!tokens?.access) {
+        const errMsg = tokens?.error || 'Invalid credentials';
+        dispatch({ type: 'SET_ERROR', payload: errMsg });
+        return { success: false, message: errMsg };
       }
 
-      dispatch({ type: 'SET_AUTH', payload: { isAuthenticated: true, token } });
-      dispatch({ type: 'SET_USER', payload: user });
-      if (active_membership) {
-        dispatch({ type: 'SET_MEMBERSHIP', payload: active_membership });
-      }
-      if (res?.gym_details) {
-        dispatch({ type: 'SET_GYM_DETAILS', payload: res.gym_details });
-      }
+      await saveTokens(tokens.access, tokens.refresh);
+      await fetchProfile();
       dispatch({ type: 'SET_LOADING', payload: false });
-      return { success: true, user };
+      return { success: true };
     } catch (error) {
       dispatch({ type: 'SET_ERROR', payload: error.message });
       return { success: false, message: error.message };
     }
-  }, []);
+  }, [saveTokens, fetchProfile]);
 
   const register = useCallback(async (data) => {
-    dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      const payload = {
-        email: data.email,
+      const tokens = await authService.register({
+        username: data.username,
         password: data.password,
-        first_name: data.firstName,
-        last_name: data.lastName,
-        phone: data.phone,
-      };
-      const { user = null, token = null, active_membership = null } =
-        await authService.register(payload);
-
-      if (user && token) {
-        try { setAuthToken(token); } catch (e) {}
-        try { await authStorage.saveTokens(token); } catch (e) {}
-        await authStorage.saveUserProfile(user);
-        if (active_membership) {
-          await authStorage.saveMembership(active_membership);
-        }
-        if (res?.gym_details) {
-          await authStorage.saveGymDetails(res.gym_details);
-        }
-        dispatch({ type: 'SET_AUTH', payload: { isAuthenticated: true, token } });
-        dispatch({ type: 'SET_USER', payload: user });
-        if (active_membership) {
-          dispatch({ type: 'SET_MEMBERSHIP', payload: active_membership });
-        }
-        if (res?.gym_details) {
-          dispatch({ type: 'SET_GYM_DETAILS', payload: res.gym_details });
-        }
+        password2: data.password2 || data.confirmPassword,
+        gym_name: data.gymName,
+      });
+      
+      if (!tokens?.access) {
+        return { success: false, message: tokens?.error || 'Registration failed' };
       }
-      dispatch({ type: 'SET_LOADING', payload: false });
+
+      await saveTokens(tokens.access, tokens.refresh);
+      await fetchProfile();
+      return { success: true };
     } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error.message });
-      throw error;
+      return { success: false, message: error.message };
     }
-  }, []);
+  }, [saveTokens, fetchProfile]);
 
-  const setProfile = useCallback(async (profile) => {
+  const registerGym = useCallback(async (data) => {
     try {
-      dispatch({ type: 'SET_USER', payload: profile });
-      // persistence disabled: not saving profile or gym info to storage
-      try {
-        if (profile?.active_membership) {
-          dispatch({ type: 'SET_MEMBERSHIP', payload: profile.active_membership });
-          dispatch({ type: 'SET_ACTIVE_GYM', payload: profile.active_membership.gym_id });
-        }
-      } catch (e) {
-        // ignore profile set errors
+      const tokens = await authService.registerGym({
+        username: data.username,
+        password: data.password,
+        password2: data.password2 || data.confirmPassword,
+        gym_name: data.gymName,
+        gym_address: data.gymAddress,
+        gym_type: data.gymType,
+        latitude: data.latitude,
+        longitude: data.longitude,
+      });
+      
+      if (!tokens?.access) {
+        return { success: false, message: tokens?.error || 'Registration failed' };
       }
-    } catch (e) {
-      // ignore profile set errors
-    }
-  }, []);
 
-  const getProfile = useCallback(async () => {
-    try {
-      return await authStorage.getUserProfile();
-    } catch (e) {
-      return null;
+      await saveTokens(tokens.access, tokens.refresh);
+      await fetchProfile();
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: error.message };
     }
-  }, []);
+  }, [saveTokens, fetchProfile]);
 
   const logout = useCallback(async () => {
-    try {
-      await authService.logout();
-    } finally {
-      // clear in-memory token and all auth-related state
-      try { clearAuthToken(); } catch (e) { /* ignore */ }
-      try { await authStorage.clearAll(); } catch (e) { /* ignore */ }
-      dispatch({ type: 'CLEAR_AUTH' });
-    }
+    try { await authService.logout(); } catch {}
+    clearAuthToken();
+    await authStorage.clearAll();
+    dispatch({ type: 'CLEAR_AUTH' });
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    try { await fetchProfile(); } catch (e) { console.warn('Refresh profile failed:', e); }
+  }, [fetchProfile]);
 
   const updateProfile = useCallback(async (data) => {
-    try {
-      const updatedUser = await authService.updateProfile(data);
-      dispatch({ type: 'SET_USER', payload: updatedUser });
-    } catch (error) {
-      throw error;
-    }
-  }, []);
+    const updatedUser = await authService.updateProfile(data);
+    await fetchProfile();
+    return updatedUser;
+  }, [fetchProfile]);
 
-  const clearError = useCallback(() => {
-    dispatch({ type: 'CLEAR_ERROR' });
-  }, []);
+  const clearError = useCallback(() => dispatch({ type: 'CLEAR_ERROR' }), []);
 
-  const refreshAuth = useCallback(async () => {
-    await checkAuthStatus();
-  }, []);
-
-  const value = {
-    // flattened helpers for consumers
-    isAuthenticated: state.auth?.isAuthenticated ?? false,
-    token: state.auth?.token ?? null,
-    user: state.user,
-    membership: state.membership,
-    gymDetails: state.gymDetails,
-    activeGymId: state.activeGymId,
-    isLoading: state.isLoading,
-    error: state.error,
-    // actions
+  const value = useMemo(() => ({
+    ...state,
     login,
     register,
+    registerGym,
     logout,
     updateProfile,
-    setProfile,
-    getProfile,
+    refreshProfile,
     clearError,
-    refreshAuth,
-  };
+  }), [state, login, register, registerGym, logout, updateProfile, refreshProfile, clearError]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-// Custom hook to use auth context
 export default AuthContext;

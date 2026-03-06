@@ -5,10 +5,11 @@ import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
 import QRScanner from '../screens/common/QRScanner';
 import BodyPartActivitiesScreen from '../screens/main/BodyPartActivitiesScreen';
+import { ProfileScreen } from '../screens/main/ProfileScreen';
+import { EditProfileScreen } from '../screens/main/EditProfileScreen';
 import { useAuth } from '../hooks';
 import { Loading } from '../components';
 import { COLORS } from '../constants/theme';
-import { ProfileScreen } from '../screens';
 
 const Stack = createNativeStackNavigator();
 
@@ -41,7 +42,7 @@ export const RootNavigator = () => {
         },
       }}
     >
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: true }}>
         {isAuthenticated ? (
           <>
             <Stack.Screen name="Main" component={MainNavigator} />
@@ -50,6 +51,11 @@ export const RootNavigator = () => {
             {/* include Profile */}
             {/* root-level profile screen; name unique to avoid tab collision */}
             <Stack.Screen name="ProfileRoot" component={ProfileScreen} />
+            <Stack.Screen 
+              name="EditProfile" 
+              component={EditProfileScreen}
+              options={{ gestureEnabled: true, animation: 'slide_from_right' }}
+            />
           </>
         ) : (
           <Stack.Screen name="Auth" component={AuthNavigator} />

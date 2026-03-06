@@ -1,9 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { COLORS, SIZES, SHADOWS } from '../../constants/theme';
 
-export const StatCard = ({ title, value, total_load, change, onPress, style }) => {
+export const StatCard = ({ title, value, total_load, change, onPress, style, iconSource }) => {
   const Wrapper = onPress ? TouchableOpacity : View;
 
   // compute progress percent
@@ -43,7 +43,11 @@ export const StatCard = ({ title, value, total_load, change, onPress, style }) =
             strokeDashoffset={strokeDashoffset}
           />
         </Svg>
-        <Text style={styles.circleText}>{title.charAt(0)}</Text>
+        {iconSource ? (
+          <Image source={iconSource} style={styles.circleIcon} />
+        ) : (
+          <Text style={styles.circleText}>{title.charAt(0)}</Text>
+        )}
       </View>
 
       <Text style={styles.title}>{title}</Text>
@@ -83,6 +87,13 @@ const styles = StyleSheet.create({
     fontSize: SIZES.h3,
     fontWeight: '700',
     color: COLORS.text,
+  },
+  circleIcon: {
+    position: 'absolute',
+    width: 70,
+    height: 70,
+    resizeMode: 'cover',
+    borderRadius: 35,
   },
   title: {
     fontSize: SIZES.bodySmall,

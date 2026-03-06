@@ -22,43 +22,59 @@ export function useBodyPartLoad() {
 
   const getCurrentRush = useCallback(
     async (dateStr, slot = 'current', overrideGymId = null) => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        let id = overrideGymId || gymIdFromCtx;
-        console.log('getcurrentrush , id', id)
-        // if still no id, check async storage (e.g. saved from last QR scan)
-        if (!id) {
+      // determine gym id first; if absent skip and avoid loading spinner
+      let id = overrideGymId || gymIdFromCtx;
+      console.log('getcurrentrush , id', id)
+      if (!id) {
+        // try storage fallback
+        try {
           const stored = await gymStorage.getGymInfo();
           console.log('[useBodyPartLoad] storage value', stored);
           if (stored) {
             id = stored?.gym_id ?? stored?.id ?? null;
           }
+        } catch (e) {
+          // ignore
         }
-        // final attempt using gymService endpoint if nothing else provided
-        if (!id) {
-          try {
-            const info = await gymService.getGymInfo();
-            console.log('[useBodyPartLoad] gymInfo fallback', info);
-            id = info?.gym_id ?? info?.id ?? null;
-          } catch (e) {
-            // ignore 404 or other errors, we'll just bail out gracefully
+      }
+      if (!id) {
+        console.warn('[useBodyPartLoad] no gym id available, skipping rush fetch');
+        return { data: null };
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+          const stored = await gymStorage.getGymInfo();
+          console.log('[useBodyPartLoad] storage value', stored);
+          if (stored) {
+            id = stored?.gym_id ?? stored?.id ?? null;
           }
-        }
 
-        if (!id) {
-          console.warn('[useBodyPartLoad] no gym id available, skipping rush fetch');
-          return { data: null };
-        }
+          // final attempt using gymService endpoint if nothing else provided
+          if (!id) {
+            try {
+              const info = await gymService.getGymInfo();
+              console.log('[useBodyPartLoad] gymInfo fallback', info);
+              id = info?.gym_id ?? info?.id ?? null;
+            } catch (e) {
+              // ignore 404 or other errors, we'll just bail out gracefully
+            }
+          }
 
-        // log for debugging network issue
-        console.log('[useBodyPartLoad] fetching rush', { id, dateStr, slot });
+          if (!id) {
+            console.warn('[useBodyPartLoad] no gym id available, skipping rush fetch');
+            return { data: null };
+          }
 
-        const paramsSlot = slot === 'current' ? 'current' : slot;
-        const result = await gymService.getCurrentRush(id, dateStr, paramsSlot);
-        setData(result);
-        return { data: result };
+          // log for debugging network issue
+          console.log('[useBodyPartLoad] fetching rush', { id, dateStr, slot });
+
+          const paramsSlot = slot === 'current' ? 'current' : slot;
+          const result = await gymService.getCurrentRush(id, dateStr, paramsSlot);
+          setData(result);
+          return { data: result };
       } catch (err) {
         setError(err);
         console.error('[useBodyPartLoad] error', err);

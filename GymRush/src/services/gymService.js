@@ -40,6 +40,16 @@ export const gymService = {
     }
   },
 
+  async searchGyms(query) {
+    try {
+      const params = { q: query };
+      const response = await api.get(ENDPOINTS.GYM_SEARCH, { params });
+      return response.data;
+    } catch (error) {
+      throw handleError(error);
+    }
+  },
+
   async checkIn(gymId = null, bodyParts = []) {
     try {
       let id = gymId;

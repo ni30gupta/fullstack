@@ -4,6 +4,7 @@ export function useForm(arg1 = {}, arg2) {
   // Support both signatures:
   // useForm({ initialValues, validationSchema })
   // useForm(initialValues, validationSchema)
+  // default empty values; callers should pass their own via arguments
   let initialValues = {};
   let validationSchema = undefined;
 
@@ -117,6 +118,7 @@ export function useForm(arg1 = {}, arg2) {
     handleChange,
     handleBlur,
     handleSubmit,
+    setValues,
     setFieldValue,
     setFieldError,
     setSubmitting,

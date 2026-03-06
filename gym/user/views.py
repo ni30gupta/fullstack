@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
-from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, UserProfileSerializer
+from .serializers import RegisterSerializer, RegisterGymSerializer, LoginSerializer, UserSerializer, UserProfileSerializer
 from gym.serializers import GymSerializer
 from .models import UserProfile
 from gym.models import Membership, Gym
@@ -41,12 +41,55 @@ class RegisterView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         tokens = get_tokens_for_user(user)
+
+        # if gym_name was provided, attempt to create a pending membership request
+        gym_name = request.data.get('gym_name')
+        if gym_name:
+            try:
+                gym_obj = Gym.objects.filter(name__iexact=gym_name).first()
+                if gym_obj:
+                    Membership.objects.create(user=user, gym=gym_obj, is_active=False)
+            except Exception:
+                # swallow any errors; registration should not fail because of membership
+                pass
         
-        return Response({
-            'user': UserSerializer(user).data,
-            'tokens': tokens,
-            'message': 'User registered successfully'
-        }, status=status.HTTP_201_CREATED)
+        # Only return tokens; client will call /auth/profile for details
+        return Response(tokens, status=status.HTTP_201_CREATED)
+
+
+class RegisterGymView(generics.CreateAPIView):
+    """Create a new user and gym in one shot; returns tokens and gym details."""
+    queryset = User.objects.all()
+    permission_classes = (permissions.AllowAny,)
+    serializer_class = RegisterGymSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except Exception as exc:
+            # flatten validation errors into single error string
+            from rest_framework.exceptions import ValidationError
+
+            if isinstance(exc, ValidationError):
+                detail = exc.detail
+                if isinstance(detail, dict):
+                    pieces = []
+                    for field, msgs in detail.items():
+                        if isinstance(msgs, (list, tuple)):
+                            pieces.append(f"{field} - {', '.join(str(m) for m in msgs)}")
+                        else:
+                            pieces.append(f"{field} - {msgs}")
+                    return Response({'error': '; '.join(pieces)}, status=status.HTTP_400_BAD_REQUEST)
+            # fallback to default behaviour
+            raise
+
+        result = serializer.save()  # dict with user and gym
+        user = result.get('user')
+        tokens = get_tokens_for_user(user)
+
+        # Only return tokens; client will call /auth/profile for details
+        return Response(tokens, status=status.HTTP_201_CREATED)
 
 
 class LoginView(APIView):
@@ -64,40 +107,8 @@ class LoginView(APIView):
         
         if user is not None:
             tokens = get_tokens_for_user(user)
-            # If the user is a gym owner, return gym details instead of membership info
-            try:
-                gym = Gym.objects.get(owner=user)
-            except Gym.DoesNotExist:
-                gym = None
-
-            if gym is not None:
-                gym_data = GymSerializer(gym).data
-                return Response({
-                    'user': UserSerializer(user).data,
-                    'tokens': tokens,
-                    'gym_details': gym_data,
-                    'message': 'Login successful (owner)'
-                }, status=status.HTTP_200_OK)
-
-            # include only the active membership (user can be active in at most one gym)
-            active_obj = Membership.objects.filter(user=user, is_active=True).select_related('gym').order_by('-created_at').first()
-            if active_obj:
-                active = {
-                    'gym_id': active_obj.gym.id,
-                    'gym_name': active_obj.gym.name,
-                    'is_active': active_obj.is_active,
-                    'start_date': active_obj.start_date.isoformat() if active_obj.start_date else None,
-                    'end_date': active_obj.end_date.isoformat() if active_obj.end_date else None,
-                }
-            else:
-                active = None
-
-            return Response({
-                'user': UserSerializer(user).data,
-                'tokens': tokens,
-                'active_membership': active,
-                'message': 'Login successful'
-            }, status=status.HTTP_200_OK)
+            # Only return tokens; client will call /auth/profile for details
+            return Response(tokens, status=status.HTTP_200_OK)
         else:
             return Response({
                 'error': 'Invalid credentials'
@@ -125,6 +136,49 @@ class UserProfileView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        user_data = UserSerializer(user).data
+        
+        # Include user profile data
+        try:
+            profile = UserProfile.objects.get(user=user)
+            profile_data = UserProfileSerializer(profile).data
+        except UserProfile.DoesNotExist:
+            profile_data = None
+        
+        # Check if user is a gym owner
+        try:
+            gym = Gym.objects.get(owner=user)
+        except Gym.DoesNotExist:
+            gym = None
+
+        response_data = {'user': user_data, 'profile': profile_data}
+
+        if gym is not None:
+            # User is a gym owner - return gym_details
+            response_data['gym_details'] = GymSerializer(gym).data
+            response_data['is_owner'] = True
+        else:
+            # Regular user - return active_membership
+            active_obj = Membership.objects.filter(
+                user=user, is_active=True
+            ).select_related('gym').order_by('-created_at').first()
+            
+            if active_obj:
+                response_data['active_membership'] = {
+                    'gym_id': active_obj.gym.id,
+                    'gym_name': active_obj.gym.name,
+                    'is_active': active_obj.is_active,
+                    'start_date': active_obj.start_date.isoformat() if active_obj.start_date else None,
+                    'end_date': active_obj.end_date.isoformat() if active_obj.end_date else None,
+                }
+            else:
+                response_data['active_membership'] = None
+            response_data['is_owner'] = False
+
+        return Response(response_data)
 
 
 class UserProfileViewSet(viewsets.ModelViewSet):

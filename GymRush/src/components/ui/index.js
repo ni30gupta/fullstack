@@ -6,3 +6,4 @@ export { Loading } from './Loading';
 export { Badge } from './Badge';
 export { StatCard } from './StatCard';
 export { GymRush } from './GymRush';
+export { ActiveSessionCard } from './ActiveSessionCard';

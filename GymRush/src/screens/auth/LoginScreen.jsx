@@ -2,8 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Input } from '../../components';
-import { useForm } from '../../hooks';
-import { useAuth } from '../../hooks';
+import { useForm, useAuth } from '../../hooks';
 import { COLORS, SIZES } from '../../constants/theme';
 import { VALIDATION } from '../../constants/config';
 
@@ -51,8 +50,7 @@ export const LoginScreen = ({ navigation }) => {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <Text style={styles.logo}>💪 GymRush</Text>
-            <Text style={styles.title}>Welcome Back!</Text>
+            <Text style={styles.logo}>GymRush</Text>
             <Text style={styles.subtitle}>Sign in to continue your fitness journey</Text>
           </View>
 
@@ -111,6 +109,12 @@ export const LoginScreen = ({ navigation }) => {
               onPress={() => navigation.navigate('Register')}
               style={styles.signupButton}
             />
+            <Button
+              title="Register Gym"
+              variant="outline"
+              onPress={() => navigation.navigate('RegisterGym')}
+              style={[styles.signupButton, { marginTop: SIZES.base }]}
+            />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -136,6 +140,7 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.marginLarge,
   },
   logo: {
+    color: COLORS.primary,
     fontSize: 42,
     marginBottom: SIZES.margin,
   },

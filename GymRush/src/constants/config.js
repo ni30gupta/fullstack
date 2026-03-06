@@ -1,6 +1,6 @@
 export const API_CONFIG = {
   BASE_URL: 'http://127.0.0.1:8000',
-  // BASE_URL: 'http://192.168.1.9:8000',
+  // BASE_URL: 'http://192.168.1.45:8000',
   TIMEOUT: 30000,
   VERSION: 'v1',
 };
@@ -35,8 +35,10 @@ export const config = {
   // Auth
   AUTH_LOGIN: '/api/auth/login/',
   AUTH_REGISTER: '/api/auth/register/',
+  AUTH_REGISTER_GYM: '/api/auth/register-gym/',
   AUTH_LOGOUT: '/api/auth/logout/',
   AUTH_PROFILE: '/api/auth/profile/',
+  AUTH_USER_PROFILE: '/api/auth/profiles/me/',
   AUTH_FORGOT_PASSWORD: '/api/auth/forgot-password/',
   AUTH_TOKEN_REFRESH: '/api/auth/token/refresh/',
 
@@ -51,6 +53,7 @@ export const config = {
   TRAINER_SLOTS: '/api/gym/trainers/:id/slots/',
   BOOKINGS: '/api/gym/bookings/',
   BOOKING_DELETE: '/api/gym/bookings/:id/',
+  GYM_SEARCH: '/api/gyms/search/',
   GYM_DETAIL: '/api/gyms/:id/',
 };
 

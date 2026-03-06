@@ -57,6 +57,29 @@ class GymViewSet(viewsets.ModelViewSet):
             return
         serializer.save()
 
+    @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny], url_path='search')
+    def search(self, request):
+        """Search gyms by name. Query param `q` is used for case-insensitive partial match.
+
+        Returns a small list of gyms (id, name, address, owner_username) for dropdowns.
+        Minimum query length is 2 characters and results capped at 5 items.
+        Example: GET /api/gyms/search/?q=fit
+        """
+        q = request.query_params.get('q', '').strip()
+        if len(q) < 2:
+            return Response([], status=status.HTTP_200_OK)
+
+        qs = self.queryset.filter(name__icontains=q)[:5]
+        data = []
+        for g in qs:
+            data.append({
+                'id': g.id,
+                'name': g.name,
+                'address': g.address,
+                'owner_username': g.owner.username if g.owner else None,
+            })
+        return Response(data)
+
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def register(self, request, pk=None):
         """Alias action: owner claims/registers the gym (set owner to requester).
@@ -129,6 +152,7 @@ class GymViewSet(viewsets.ModelViewSet):
 
         data = {
             'gym_id': gym.id,
+            'gym_name': gym.name,
             # send ISO formatted with timezone offset so frontend sees local time
             'started_at': now.isoformat(),
             'body_parts': [bp.name for bp in body_parts],

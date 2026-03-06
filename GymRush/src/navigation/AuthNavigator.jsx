@@ -1,6 +1,6 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { LoginScreen, RegisterScreen, ForgotPasswordScreen } from '../screens';
+import { LoginScreen, RegisterScreen, RegisterGymScreen, ForgotPasswordScreen } from '../screens';
 import { COLORS } from '../constants/theme';
 
 const Stack = createNativeStackNavigator();
@@ -16,6 +16,7 @@ export const AuthNavigator = () => {
     >
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
+      <Stack.Screen name="RegisterGym" component={RegisterGymScreen} />
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
     </Stack.Navigator>
   );

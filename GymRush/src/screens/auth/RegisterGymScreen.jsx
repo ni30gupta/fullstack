@@ -1,10 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useDebounce } from '../../hooks/useDebounce';
-
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Input } from '../../components';
-import { gymService } from '../../services';
+import { Button, Input, Picker } from '../../components';
 import { useForm } from '../../hooks';
 import { useAuth } from '../../hooks';
 import { COLORS, SIZES } from '../../constants/theme';
@@ -27,67 +24,85 @@ const validationSchema = {
     return null;
   },
   gymName: (value) => {
-    // optional search field
-    if (value && value.length < 2) return 'Gym name must be at least 2 characters';
+    if (!value) return 'Gym name is required';
+    return null;
+  },
+  gymAddress: (value) => {
+    if (!value) return 'Gym address is required';
+    return null;
+  },
+  gymType: (value) => {
+    if (!value) return 'Gym type is required';
     return null;
   },
 };
 
-export const RegisterScreen = ({ navigation }) => {
-  const { register } = useAuth();
-  const [localLoading, setLocalLoading] = useState(false);
-  const [localError, setLocalError] = useState(null);
+export const RegisterGymScreen = ({ navigation }) => {
+  const { registerGym } = useAuth();
+  const [localLoading, setLocalLoading] = React.useState(false);
+  const [localError, setLocalError] = React.useState(null);
+
+  // example defaults — you can change or remove before production
+  const initialValues = {
+    username: '9113265630',
+    password: 'ni30@1234',
+    confirmPassword: 'ni30@1234',
+    gymName: 'hoo',
+    gymAddress: 'mansa',
+    gymType: 'yoga',
+    latitude: null,
+    longitude: null,
+  };
 
   const { values, errors, touched, handleChange, handleBlur, handleSubmit, isValid, setValues } = useForm(
-    { username: '', password: '', confirmPassword: '', gymName: '' },
+    initialValues,
     validationSchema
   );
 
-  const [gymOptions, setGymOptions] = useState([]);
-  const selectionRef = useRef(false); // flag to skip search after picking
+  console.log('va', values); // ensure this prints when screen renders
 
-  // search whenever gymName value changes
-  const debouncedGym = useDebounce(values.gymName, 300);
-
+  // attempt to get current location once on mount
   useEffect(() => {
-    if (selectionRef.current) {
-      selectionRef.current = false;
-      return;
+    if (navigator && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          setValues({ ...values, latitude, longitude });
+        },
+        (err) => console.warn('location error', err),
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
+      );
     }
-    let active = true;
-    const q = debouncedGym;
-    if (q && q.length > 1) {
-      gymService.searchGyms(q)
-        .then((res) => {
-          if (active) setGymOptions(res);
-        })
-        .catch(() => {
-          if (active) setGymOptions([]);
-        });
-    } else {
-      setGymOptions([]);
-    }
-    return () => {
-      active = false;
-    };
-  }, [debouncedGym]);
+  }, []);
 
   const onSubmit = async () => {
-    setLocalError(null);
-    setLocalLoading(true);
     const payload = {
       username: values.username,
       password: values.password,
       password2: values.confirmPassword,
-      gymName: values.gymName,  // use camelCase so AuthContext picks it up
+      gymName: values.gymName,
+      gymAddress: values.gymAddress,
+      gymType: values.gymType,
+      latitude: values.latitude,
+      longitude: values.longitude,
     };
-    console.log('Register payload', payload);
-    const result = await register(payload);
-    setLocalLoading(false);
-    if (result?.success) {
-      // user logged in automatically, navigation effect happens via auth
-    } else {
-      setLocalError(result.message || 'Registration failed');
+
+    setLocalError(null);
+    setLocalLoading(true);
+    try {
+      const result = await registerGym(payload);
+      if (result.success) {
+        // successful registration, maybe navigate or show alert
+        Alert.alert('Success', 'Gym registered. Please login.');
+        navigation.navigate('Login');
+      } else {
+        setLocalError(result.message);
+      }
+    } catch (error) {
+      console.warn('registerGym exception', error);
+      setLocalError(error.message || 'Unexpected error');
+    } finally {
+      setLocalLoading(false);
     }
   };
 
@@ -97,8 +112,8 @@ export const RegisterScreen = ({ navigation }) => {
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <Text style={styles.logo}>GymRush</Text>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join us and start your fitness journey</Text>
+            <Text style={styles.title}>Register Your Gym</Text>
+            <Text style={styles.subtitle}>Create an owner account and add your gym</Text>
           </View>
 
           <View style={styles.form}>
@@ -141,37 +156,38 @@ export const RegisterScreen = ({ navigation }) => {
               touched={touched.confirmPassword}
             />
 
-            <View style={styles.searchContainer}>
-              <Input
-                label="Gym Name"
-                placeholder="Search for gym (optional)"
-                value={values.gymName}
-                onChangeText={handleChange('gymName')}
-                onBlur={handleBlur('gymName')}
-                error={errors.gymName}
-                touched={touched.gymName}
-              />
-              {gymOptions.length > 0 && (
-                <View style={styles.dropdown}>
-                  {gymOptions.map((g) => (
-                    <TouchableOpacity
-                      key={g.id}
-                      onPress={() => {
-                        selectionRef.current = true;
-                        setValues((prev) => ({ ...prev, gymName: g.name }));
-                        setGymOptions([]);
-                      }}
-                      style={styles.dropdownItem}
-                    >
-                      <Text style={{ color: COLORS.text }}>{g.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
+            <Input
+              label="Gym Name"
+              placeholder="Enter your gym's name"
+              value={values.gymName}
+              onChangeText={handleChange('gymName')}
+              onBlur={handleBlur('gymName')}
+              error={errors.gymName}
+              touched={touched.gymName}
+            />
+
+            <Input
+              label="Gym Address"
+              placeholder="Enter your gym's address"
+              value={values.gymAddress}
+              onChangeText={handleChange('gymAddress')}
+              onBlur={handleBlur('gymAddress')}
+              error={errors.gymAddress}
+              touched={touched.gymAddress}
+            />
+
+            <Input
+              label="Gym Type"
+              placeholder="e.g. CrossFit, Yoga, General Fitness"
+              value={values.gymType}
+              onChangeText={handleChange('gymType')}
+              onBlur={handleBlur('gymType')}
+              error={errors.gymType}
+              touched={touched.gymType}
+            />
 
             <Button
-              title="Create Account"
+              title="Register Gym"
               onPress={handleSubmit(onSubmit)}
               loading={localLoading}
               disabled={!isValid || localLoading}
@@ -258,31 +274,6 @@ const styles = StyleSheet.create({
   signinButton: {
     width: '100%',
   },
-  searchContainer: {
-    position: 'relative',
-  },
-  dropdown: {
-    position: 'absolute',
-    top: 85, // approximate height of input + label
-    left: 0,
-    right: 0,
-    backgroundColor: COLORS.errorLight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    maxHeight: 150,
-    borderRadius: SIZES.radius,
-    zIndex: 10,
-    elevation: 5, // android shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  dropdownItem: {
-    padding: SIZES.padding,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
 });
 
-export default RegisterScreen;
+export default RegisterGymScreen;

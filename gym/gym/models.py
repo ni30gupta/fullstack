@@ -26,6 +26,9 @@ class Gym(models.Model):
 
     class Meta:
         db_table = 'gym'
+        constraints = [
+            models.UniqueConstraint(fields=['owner', 'name'], name='unique_owner_gym_name')
+        ]
 
     def __str__(self):
         return self.name
@@ -168,7 +171,7 @@ class GymActivity(models.Model):
         self.save(update_fields=['ended_at'])
         return True
 
-
+'''
 class MemberPoints(models.Model):
     """Aggregated leaderboard points for each member per gym."""
     membership = models.OneToOneField(
@@ -266,3 +269,4 @@ class PointTransaction(models.Model):
     def __str__(self):
         sign = '+' if self.points >= 0 else ''
         return f"{self.member_points.membership.user.username}: {sign}{self.points} ({self.reason})"
+'''
