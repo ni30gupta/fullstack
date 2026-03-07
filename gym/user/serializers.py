@@ -120,7 +120,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         fields = (
             'name', 'education', 'gender', 'dob', 'married', 'height', 'weight',
             'fitness_goal', 'preferred_time', 'preferred_days', 'address',
-            'profession',
+            'profession', 'profile_image',
         )
         extra_kwargs = {
             'dob': {'required': False, 'allow_null': True},
@@ -142,3 +142,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         instance.update_from_dict(validated_data, save=True)
         return instance
+
+
+class AvatarUploadSerializer(serializers.ModelSerializer):
+    """Handles only the profile_image field for upload/replace operations."""
+    class Meta:
+        model = UserProfile
+        fields = ('profile_image',)

@@ -50,6 +50,7 @@ class UserProfile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     address = models.TextField(null=True, blank=True)
     profession = models.CharField(max_length=255, null=True, blank=True)
+    profile_image = models.ImageField(upload_to='profile_images/', null=True, blank=True)
     
     class Meta:
         db_table = 'user_profile'
@@ -76,7 +77,7 @@ class UserProfile(models.Model):
         allowed = {
             'name', 'education', 'gender', 'dob', 'married', 'height', 'weight',
             'fitness_goal', 'preferred_time', 'preferred_days', 'address',
-            'profession',
+            'profession', 'profile_image',
         }
 
         changed = False

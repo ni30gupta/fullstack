@@ -82,18 +82,18 @@ export const authService = {
     }
   },
 
-  async updateProfile(data) {
+  async updateUserProfile(data) {
     try {
-      const response = await api.patch(ENDPOINTS.AUTH_PROFILE, data);
+      const response = await api.patch(ENDPOINTS.AUTH_USER_PROFILE, data);
       return response.data;
     } catch (error) {
       throw handleError(error);
     }
   },
 
-  async updateUserProfile(data) {
+  async uploadAvatar(imageAsset) {
     try {
-      const response = await api.patch(ENDPOINTS.AUTH_USER_PROFILE, data);
+      const response = await api.uploadFile(ENDPOINTS.AUTH_AVATAR, imageAsset);
       return response.data;
     } catch (error) {
       throw handleError(error);
@@ -108,17 +108,6 @@ export const authService = {
     }
   },
 
-  async checkAuthStatus() {
-    // Try to fetch current profile/membership from server to validate auth.
-    try {
-      const profileResp = await this.getProfile();
-      // profileResp now contains { user, active_membership, gym_details } if valid
-      const { user, active_membership = null, gym_details = null } = profileResp;
-      return { isAuthenticated: true, user, active_membership, gym_details, tokens: null };
-    } catch (error) {
-      return { isAuthenticated: false, user: null };
-    }
-  },
 };
 
 export default authService;

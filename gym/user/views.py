@@ -3,9 +3,10 @@ from rest_framework import status, generics, permissions, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
-from .serializers import RegisterSerializer, RegisterGymSerializer, LoginSerializer, UserSerializer, UserProfileSerializer
+from .serializers import RegisterSerializer, RegisterGymSerializer, LoginSerializer, UserSerializer, UserProfileSerializer, AvatarUploadSerializer
 from gym.serializers import GymSerializer
 from .models import UserProfile
 from gym.models import Membership, Gym
@@ -144,7 +145,7 @@ class UserProfileView(generics.RetrieveAPIView):
         # Include user profile data
         try:
             profile = UserProfile.objects.get(user=user)
-            profile_data = UserProfileSerializer(profile).data
+            profile_data = UserProfileSerializer(profile, context={'request': request}).data
         except UserProfile.DoesNotExist:
             profile_data = None
         
@@ -221,3 +222,26 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+    @action(detail=False, methods=['post', 'delete'], url_path='me/avatar',
+            parser_classes=[MultiPartParser, FormParser])
+    def avatar(self, request):
+        """POST  /api/auth/profiles/me/avatar/  — upload or replace profile picture.
+           DELETE /api/auth/profiles/me/avatar/  — remove profile picture."""
+        profile = UserProfile.get_or_create_for_user(request.user)
+
+        if request.method == 'DELETE':
+            if profile.profile_image:
+                # delete the actual file from disk, then clear the DB field
+                profile.profile_image.delete(save=True)
+            return Response({'profile_image': None}, status=status.HTTP_200_OK)
+
+        # POST: upload / replace
+        if profile.profile_image:
+            # remove the old file from disk before saving the new one
+            profile.profile_image.delete(save=False)
+
+        serializer = AvatarUploadSerializer(profile, data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)

@@ -7,6 +7,7 @@ psycopg2-binary==2.9.9
 python-dateutil==2.9.0
 sqlparse==0.5.5
 django-cors-headers==3.13.0
+Pillow==10.3.0
 # Celery for async task processing and scheduling
 celery==5.4.0
 django-celery-beat==2.6.0

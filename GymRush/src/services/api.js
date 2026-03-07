@@ -1,4 +1,5 @@
 import axios from 'axios';
+import ReactNativeBlobUtil from 'react-native-blob-util';
 import { API_CONFIG } from '../constants/config';
 import { authStorage } from './storage';
 import { getAuthToken as getInMemoryToken, setAuthToken } from './authToken';
@@ -12,10 +13,9 @@ const apiClient = axios.create({
     Accept: 'application/json',
   },
 });
-// Add debug logging to help diagnose network issues from the app
+
 apiClient.interceptors.request.use(
   async (config) => {
-    // attach token if available (prefer in-memory token, fallback to storage)
     let token = getInMemoryToken();
     if (!token) {
       token = await authStorage.getAuthToken();
@@ -23,26 +23,14 @@ apiClient.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-
-    // Diagnostic log removed
-
     return config;
   },
-  (error) => {
-    // eslint-disable-next-line no-console
-    console.error('[api] Request error:', error.message || error);
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // Log the error details for debugging
-    try {
-      // eslint-disable-next-line no-console
-      console.error('[api] Response error:', error?.response?.status, error?.config?.url, error?.message);
-    } catch (e) {}
     const originalRequest = error.config;
 
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -56,7 +44,6 @@ apiClient.interceptors.response.use(
           });
 
           const { access } = response.data;
-          // persist the refreshed access token (refresh token unchanged)
           try { await authStorage.saveTokens(access, refreshToken); } catch (e) {}
           try { setAuthToken(access); } catch (e) {}
 
@@ -79,6 +66,41 @@ export const api = {
   put: (url, data, config) => apiClient.put(url, data, config),
   patch: (url, data, config) => apiClient.patch(url, data, config),
   delete: (url, config) => apiClient.delete(url, config),
+
+  // File uploads use ReactNativeBlobUtil to stream directly from disk.
+  // Axios/fetch/XHR cannot reliably handle file:// URIs in React Native.
+  async uploadFile(url, fileAsset) {
+    let token = getInMemoryToken();
+    if (!token) token = await authStorage.getAuthToken();
+
+    const response = await ReactNativeBlobUtil.fetch(
+      'POST',
+      `${API_CONFIG.BASE_URL}${url}`,
+      {
+        Authorization: token ? `Bearer ${token}` : undefined,
+        'Content-Type': 'multipart/form-data',
+      },
+      [
+        {
+          name: 'profile_image',
+          filename: fileAsset.fileName ?? 'avatar.jpg',
+          type: fileAsset.type ?? 'image/jpeg',
+          data: ReactNativeBlobUtil.wrap(fileAsset.uri.replace('file://', '')),
+        },
+      ]
+    );
+
+    const status = response.respInfo.status;
+    const json = JSON.parse(response.data);
+
+    if (status < 200 || status >= 300) {
+      const err = new Error(json?.error || json?.detail || 'Upload failed');
+      err.response = { status, data: json };
+      throw err;
+    }
+
+    return { data: json };
+  },
 };
 
 export default api;

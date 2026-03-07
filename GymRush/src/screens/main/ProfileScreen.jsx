@@ -1,6 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Card, Avatar, Badge, Button } from '../../components';
 import { useAuth } from '../../hooks';
 import { COLORS, SIZES } from '../../constants/theme';
@@ -25,8 +27,46 @@ const MenuItem = ({ icon, title, subtitle, onPress, showBadge, badgeCount }) => 
 );
 
 export const ProfileScreen = () => {
-  const { user, membership, logout } = useAuth();
+  const { user, membership, logout, uploadAvatar } = useAuth();
   const navigation = useNavigation();
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  const pickImage = async (source) => {
+    const options = {
+      mediaType: 'photo',
+      quality: 0.8,
+      maxWidth: 800,
+      maxHeight: 800,
+      includeBase64: false,
+    };
+    const result = source === 'camera'
+      ? await launchCamera(options)
+      : await launchImageLibrary(options);
+
+    if (result.didCancel || !result.assets?.length) return;
+
+    setAvatarUploading(true);
+    try {
+      await uploadAvatar(result.assets[0]);
+    } catch (e) {
+      Alert.alert('Upload Failed', e.message || 'Could not update profile picture.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const handleAvatarPress = () => {
+    Alert.alert(
+      'Profile Picture',
+      'Choose an option',
+      [
+        { text: 'Take Photo', onPress: () => pickImage('camera') },
+        { text: 'Choose from Gallery', onPress: () => pickImage('gallery') },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -68,8 +108,25 @@ export const ProfileScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Profile Header */}
         <View style={styles.header}>
-          <Avatar source={user?.avatar} name={user?.name} size="xlarge" />
-          <Text style={styles.userName}>{user?.name || 'Member'}</Text>
+          <TouchableOpacity
+            onPress={handleAvatarPress}
+            style={styles.avatarWrapper}
+            activeOpacity={0.8}
+            disabled={avatarUploading}
+          >
+            <Avatar
+              source={user?.profile?.profile_image}
+              name={user?.profile?.name || user?.username}
+              size="xlarge"
+            />
+            <View style={styles.cameraIconBadge}>
+              {avatarUploading
+                ? <ActivityIndicator size="small" color={COLORS.white} />
+                : <Icon name="camera-alt" size={16} color={COLORS.white} />
+              }
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.userName}>{user?.profile?.name || user?.username || 'Member'}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
           <Badge
             label={membershipLabel}
@@ -200,6 +257,22 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     paddingVertical: SIZES.paddingLarge,
+  },
+  avatarWrapper: {
+    position: 'relative',
+  },
+  cameraIconBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.background,
   },
   userName: {
     fontSize: SIZES.h2,

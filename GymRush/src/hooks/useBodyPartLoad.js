@@ -5,7 +5,7 @@ import { gymService, gymStorage } from '../services';
 // Hook to fetch "rush" (body‑part load) data for the current gym and date.
 export function useBodyPartLoad() {
   const { membership, gymDetails } = useAuth();
-  console.log(gymDetails)
+  // console.log(gymDetails)
   // membership object may differ shape depending on backend version; try multiple fields
   // gymDetails is present when the logged-in user is a gym owner
   const gymIdFromCtx =

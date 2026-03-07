@@ -34,6 +34,14 @@ function authReducer(state, action) {
         activeGymId: action.payload.active_membership?.gym_id ?? action.payload.gym_details?.id ?? state.activeGymId,
       };
     
+    case 'UPDATE_AVATAR':
+      return {
+        ...state,
+        user: state.user
+          ? { ...state.user, profile: { ...state.user.profile, profile_image: action.payload } }
+          : state.user,
+      };
+
     case 'CLEAR_AUTH':
       return { ...initialState, isLoading: false };
     
@@ -216,11 +224,12 @@ export function AuthProvider({ children }) {
     try { await fetchProfile(); } catch (e) { console.warn('Refresh profile failed:', e); }
   }, [fetchProfile]);
 
-  const updateProfile = useCallback(async (data) => {
-    const updatedUser = await authService.updateProfile(data);
-    await fetchProfile();
-    return updatedUser;
-  }, [fetchProfile]);
+  const uploadAvatar = useCallback(async (imageAsset) => {
+    const data = await authService.uploadAvatar(imageAsset);
+    // update only the avatar field in state — no need for a full profile refetch
+    dispatch({ type: 'UPDATE_AVATAR', payload: data.profile_image });
+    return data;
+  }, []);
 
   const clearError = useCallback(() => dispatch({ type: 'CLEAR_ERROR' }), []);
 
@@ -230,10 +239,10 @@ export function AuthProvider({ children }) {
     register,
     registerGym,
     logout,
-    updateProfile,
+    uploadAvatar,
     refreshProfile,
     clearError,
-  }), [state, login, register, registerGym, logout, updateProfile, refreshProfile, clearError]);
+  }), [state, login, register, registerGym, logout, uploadAvatar, refreshProfile, clearError]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

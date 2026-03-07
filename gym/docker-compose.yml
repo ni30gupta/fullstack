@@ -58,6 +58,7 @@ services:
       - type: bind
         source: .
         target: /app
+      - media_data:/app/media
 
     # shorthand: ports:
     ports:
@@ -113,3 +114,4 @@ services:
 volumes:
   postgres_data:
   rabbitmq_data:
+  media_data:

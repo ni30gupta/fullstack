@@ -1,6 +1,6 @@
 export const API_CONFIG = {
-  BASE_URL: 'http://127.0.0.1:8000',
-  // BASE_URL: 'http://192.168.1.45:8000',
+  // BASE_URL: 'http://127.0.0.1:8000',            // adb reverse tcp:8000 tcp:8000 active
+  BASE_URL: 'http://192.168.1.45:8000',     // physical device on WiFi (no adb reverse)
   TIMEOUT: 30000,
   VERSION: 'v1',
 };
@@ -39,6 +39,7 @@ export const config = {
   AUTH_LOGOUT: '/api/auth/logout/',
   AUTH_PROFILE: '/api/auth/profile/',
   AUTH_USER_PROFILE: '/api/auth/profiles/me/',
+  AUTH_AVATAR: '/api/auth/profiles/me/avatar/',
   AUTH_FORGOT_PASSWORD: '/api/auth/forgot-password/',
   AUTH_TOKEN_REFRESH: '/api/auth/token/refresh/',
 

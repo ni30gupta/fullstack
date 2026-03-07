@@ -147,6 +147,12 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Media files (user-uploaded content: profile pictures, etc.)
+# MEDIA_URL  : the URL prefix Django uses in file URLs  → e.g. /media/profile_images/foo.jpg
+# MEDIA_ROOT : absolute filesystem path where files are stored inside the container
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
