@@ -174,6 +174,9 @@ class UserProfileView(generics.RetrieveAPIView):
                     'is_active': active_obj.is_active,
                     'start_date': active_obj.start_date.isoformat() if active_obj.start_date else None,
                     'end_date': active_obj.end_date.isoformat() if active_obj.end_date else None,
+                    'address': active_obj.gym.address,
+                    'latitude': float(active_obj.gym.location.y) if active_obj.gym.location else None,
+                    'longitude': float(active_obj.gym.location.x) if active_obj.gym.location else None,
                 }
             else:
                 response_data['active_membership'] = None

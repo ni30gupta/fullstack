@@ -15,13 +15,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SIZES } from '../../constants/theme';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-export const QRScanner = ({ navigation }) => {
+export const QRScanner = ({ navigation, route }) => {
   const [hasPermission, setHasPermission] = useState(false);
   const [loading, setLoading] = useState(false);
   const [flash, setFlash] = useState(false);
   const [scannedData, setScannedData] = useState(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
-  const [selectedParts, setSelectedParts] = useState([]);
+  // Pre-populate body parts if passed from Dashboard (location fallback)
+  const [selectedParts, setSelectedParts] = useState(route?.params?.initialParts ?? []);
   const [gymPreview, setGymPreview] = useState(null);
   const [isScanning, setIsScanning] = useState(true);
 

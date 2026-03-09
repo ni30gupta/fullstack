@@ -41,8 +41,8 @@ class RegisterGymSerializer(serializers.Serializer):
     gym_name = serializers.CharField(required=True)
     gym_address = serializers.CharField(required=True)
     gym_type = serializers.CharField(required=True)
-    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
-    longitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
+    latitude = serializers.FloatField(required=False, allow_null=True)
+    longitude = serializers.FloatField(required=False, allow_null=True)
 
     def validate(self, attrs):
         if attrs.get('password') != attrs.get('password2'):
@@ -79,13 +79,19 @@ class RegisterGymSerializer(serializers.Serializer):
         from gym.models import Gym
         from datetime import time
 
+        from django.contrib.gis.geos import Point
+        location = (
+            Point(float(longitude), float(latitude), srid=4326)
+            if latitude is not None and longitude is not None
+            else None
+        )
+
         gym = Gym.objects.create(
             owner=user,
             name=gym_name,
             address=gym_address,
             gym_type=gym_type,
-            latitude=latitude,
-            longitude=longitude,
+            location=location,
             opening_time=time(6, 0),
             closing_time=time(22, 0),
             max_capacity=100,

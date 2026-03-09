@@ -5,3 +5,4 @@ export { useAuth } from './useAuth';
 export { useCheckin } from './useCheckin';
 export { useBodyPartLoad } from './useBodyPartLoad';
 export { default as useSlots } from './useSlots';
+export { useGeolocation } from './useGeolocation';

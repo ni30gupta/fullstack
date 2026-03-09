@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.gis.db.models import PointField
 from django.conf import settings
 
 
@@ -13,8 +14,10 @@ class Gym(models.Model):
     )
     name = models.CharField(max_length=255)
     address = models.TextField()
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    location = PointField(
+        null=True, blank=True, geography=True, srid=4326,
+        help_text='Geographic point stored as (longitude, latitude) in WGS84'
+    )
     opening_time = models.TimeField()
     closing_time = models.TimeField()
     max_capacity = models.IntegerField()

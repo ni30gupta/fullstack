@@ -6,6 +6,10 @@ from django.utils import timezone
 
 class GymSerializer(serializers.ModelSerializer):
     owner_username = serializers.CharField(source='owner.username', read_only=True)
+    # Expose lat/lng as plain floats — keeps the API contract unchanged while
+    # the underlying storage is a PostGIS PointField.
+    latitude = serializers.FloatField(required=False, allow_null=True)
+    longitude = serializers.FloatField(required=False, allow_null=True)
 
     class Meta:
         model = Gym
@@ -15,6 +19,26 @@ class GymSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         )
         read_only_fields = ('owner', 'verified', 'created_at', 'updated_at')
+
+    # --- read: extract x/y from Point ---
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['latitude'] = float(instance.location.y) if instance.location else None
+        rep['longitude'] = float(instance.location.x) if instance.location else None
+        return rep
+
+    # --- write: pack lat/lng into a Point before hitting the DB ---
+    def validate(self, data):
+        from django.contrib.gis.geos import Point
+        lat = data.pop('latitude', None)
+        lng = data.pop('longitude', None)
+        if lat is not None and lng is not None:
+            data['location'] = Point(float(lng), float(lat), srid=4326)
+        elif lat is not None or lng is not None:
+            raise serializers.ValidationError(
+                'Both latitude and longitude must be supplied together.'
+            )
+        return data
 
     def validate_max_capacity(self, value):
         if value is not None and value < 0:

@@ -11,6 +11,10 @@ RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
 		vim \
 		postgresql-client \
+		binutils \
+		libproj-dev \
+		gdal-bin \
+		libgdal-dev \
 	&& rm -rf /var/lib/apt/lists/*
 
 
