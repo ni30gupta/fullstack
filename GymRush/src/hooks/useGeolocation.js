@@ -1,79 +1,141 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Alert } from 'react-native';
-import { request, PERMISSIONS, checkMultiple } from 'react-native-permissions';
+import { Alert, Linking } from 'react-native';
+import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import Geolocation from '@react-native-community/geolocation';
 import { promptForEnableLocationIfNeeded } from 'react-native-android-location-enabler';
+
+Geolocation.setRNConfiguration({
+  skipPermissionRequests: false,
+  authorizationLevel: 'whenInUse',
+  locationProvider: 'playServices',
+});
 
 export function useGeolocation() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [position, setPosition] = useState(null);
-  const [locPermModal, setLocPermModal] = useState(false);
 
-  /**
-   * requestPermission — ask for location permission.
-   * Write your own implementation here.
-   */
-  const requestPermission = useCallback(async () => {
-    console.log('[useGeolocation] requestPermission called');
-    try {
-      const data = [PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION, PERMISSIONS.ANDROID.ACCESS_BACKGROUND_LOCATION];
-      const statuses = await checkMultiple(data);
-      console.log('[useGeolocation] permission statuses:', statuses);
-      if (Object.values(statuses).find(s => s !== 'granted')) {
-        console.log('[useGeolocation] permissions not fully granted → opening modal');
-        setLocPermModal(true);
-      } else {
-        console.log('[useGeolocation] all permissions already granted');
+
+  useEffect(() => {
+    return () => {
+      if (warmupWatchId.current !== null) {
+        Geolocation.clearWatch(warmupWatchId.current);
+        warmupWatchId.current = null;
       }
-    } catch (err) {
-      console.error('[useGeolocation] requestPermission error:', err);
-      setError(err?.message || 'Permission check failed');
-    }
+    };
   }, []);
 
+
   /**
-   * getLocation — request permission, enable GPS if needed, and return { latitude, longitude }.
+   * requestPermission — called on Dashboard mount.
+   * Asks for location permission and pre-warms the GPS enable dialog
+   * so both are out of the way before the user taps Check In.
+   */
+  const requestPermission = useCallback(async () => {
+    try {
+      const status = await request(PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION);
+      if (status === RESULTS.GRANTED) {
+        await promptForEnableLocationIfNeeded({
+          interval: 10000,
+          fastInterval: 5000,
+        }).catch(() => { });
+
+        // watchPosition use karo getCurrentPosition ki jagah
+        // taaki ID mile aur unmount pe clear kar sako
+        warmupWatchId.current = Geolocation.watchPosition(
+          () => {
+            console.log('[Geolocation] GPS warm-up complete');
+            // Ek baar fix mil gaya, ab clear karo
+            if (warmupWatchId.current !== null) {
+              Geolocation.clearWatch(warmupWatchId.current);
+              warmupWatchId.current = null;
+            }
+          },
+          () => { }, // ignore errors
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+        );
+      }
+    } catch {
+      // Silently ignore
+    }
+  }, []);
+  /**
+   * getLocation — requests permission, enables GPS if needed, then
+   * returns { latitude, longitude }. Throws on denial or GPS failure.
    */
   const getLocation = useCallback(async () => {
-    console.log('[useGeolocation] getLocation called');
     setLoading(true);
     setError(null);
     try {
-      // 1. Request fine location permission
+      // 1. Runtime permission
       const status = await request(PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION);
-      console.log('[useGeolocation] getLocation permission status:', status);
+      console.log('[Geolocation] permission status:', status);
       if (status === 'denied' || status === 'blocked') {
         throw new Error('Location permission denied');
       }
 
-      // 2. Prompt user to enable GPS if it's off
+      // 2. Prompt to enable GPS if it is off
       try {
         const gpsResult = await promptForEnableLocationIfNeeded({
           interval: 10000,
           fastInterval: 5000,
         });
-        console.log('[useGeolocation] GPS enable result:', gpsResult);
-      } catch (gpsErr) {
-        // User dismissed the dialog — GPS might still be on, carry on
-        console.warn('[useGeolocation] GPS enable dialog dismissed:', gpsErr?.message);
+        console.log('[Geolocation] GPS enable result:', gpsResult);
+      } catch {
+        // User dismissed the dialog — proceed; getCurrentPosition will
+        // fail with code 2 if GPS is genuinely still off.
       }
 
-      // 3. Fetch the actual position
-      const coords = await new Promise((resolve, reject) => {
-        Geolocation.getCurrentPosition(
-          loc => resolve({ latitude: loc.coords.latitude, longitude: loc.coords.longitude }),
-          err => reject(err),
-          { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
-        );
-      });
+      // 3. Fetch position — try high-accuracy GPS first; if no cached fix
+      // exists yet (cold start, code 2), fall back to network/cell location
+      // which is always available and accurate enough for a 50 m check.
+      console.log('[Geolocation] fetching position…');
+      const fetchPosition = (highAccuracy) =>
+        new Promise((resolve, reject) => {
+          Geolocation.getCurrentPosition(
+            loc => resolve({ latitude: loc.coords.latitude, longitude: loc.coords.longitude }),
+            err => reject(err),
+            {
+              enableHighAccuracy: highAccuracy,
+              timeout: highAccuracy ? 5000 : 10000,
+              maximumAge: highAccuracy ? 3000 : 30000,
+            },
+          );
+        });
 
-      console.log('[useGeolocation] getLocation → coords:', coords);
-      setPosition(coords);
+      let coords;
+      try {
+        coords = await fetchPosition(true);
+        console.log('[Geolocation] GPS position:', coords);
+      } catch (gpsErr) {
+        if (gpsErr?.code === 2) {
+          // No GPS fix yet — retry with network/cell location
+          console.warn('[Geolocation] GPS unavailable (cold start), retrying with network location…');
+          coords = await fetchPosition(false);
+          console.log('[Geolocation] network position:', coords);
+        } else {
+          throw gpsErr;
+        }
+      }
+
       return coords;
     } catch (e) {
       const msg = e?.message || 'Failed to get location';
-      console.error('[useGeolocation] getLocation error:', msg);
+      console.warn('[Geolocation] error — code:', e?.code, 'message:', msg);
+
+      // code 2 = GPS still off after prompt — show alert here and mark as
+      // handled so the caller does not show a second alert.
+      if (e?.code === 2) {
+        Alert.alert(
+          'GPS Required',
+          'Please enable Location Services in your device settings to check in automatically.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ],
+        );
+        e.handled = true;
+      }
+
       setError(msg);
       throw e;
     } finally {
@@ -81,53 +143,7 @@ export function useGeolocation() {
     }
   }, []);
 
-
-
-  const sendCurrentLocation = useCallback(() => {
-    console.log('[useGeolocation] sendCurrentLocation called');
-    Geolocation.getCurrentPosition(
-      loc => {
-        const { latitude, longitude } = loc.coords;
-        console.log('[useGeolocation] position obtained:', { latitude, longitude, accuracy: loc.coords.accuracy });
-        setPosition({ latitude, longitude });
-      },
-      err => {
-        console.warn('[useGeolocation] getCurrentPosition error:', { code: err.code, message: err.message });
-        Alert.alert('Error', err.message);
-      },
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
-    );
-  }, []);
-
-  const checkLocationProvider = useCallback(() => {
-    console.log('[useGeolocation] checkLocationProvider called → prompting GPS enable');
-    promptForEnableLocationIfNeeded({
-      interval: 10000,
-      fastInterval: 5000,
-    })
-      .then(data => {
-        console.log('[useGeolocation] GPS enable result:', data);
-        sendCurrentLocation();
-      })
-      .catch(err => {
-        console.warn('[useGeolocation] GPS enable rejected:', err);
-        Alert.alert('', 'Please enable GPS to continue', [
-          { text: 'No', onPress: () => console.log('[useGeolocation] user declined GPS enable') },
-          { text: 'OK', onPress: () => { console.log('[useGeolocation] user retrying GPS enable'); checkLocationProvider(); } },
-        ]);
-      });
-  }, [sendCurrentLocation]);
-
-  useEffect(() => {
-    console.log('[useGeolocation] locPermModal changed:', locPermModal);
-    if (locPermModal) {
-      console.log('[useGeolocation] modal opened → triggering checkLocationProvider');
-      checkLocationProvider();
-    }
-  }, [locPermModal]);
-
-
-  return { locPermModal, setLocPermModal, getLocation, requestPermission, checkLocationProvider, sendCurrentLocation, position, loading, error };
+  return { getLocation, requestPermission, loading, error };
 }
 
 export default useGeolocation;

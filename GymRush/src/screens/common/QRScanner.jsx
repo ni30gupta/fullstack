@@ -21,8 +21,10 @@ export const QRScanner = ({ navigation, route }) => {
   const [flash, setFlash] = useState(false);
   const [scannedData, setScannedData] = useState(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
-  // Pre-populate body parts if passed from Dashboard (location fallback)
-  const [selectedParts, setSelectedParts] = useState(route?.params?.initialParts ?? []);
+  // Body parts passed from Dashboard → read-only in the confirm modal
+  const initialParts = route?.params?.initialParts ?? [];
+  const partsFromDashboard = initialParts.length > 0;
+  const [selectedParts, setSelectedParts] = useState(initialParts);
   const [gymPreview, setGymPreview] = useState(null);
   const [isScanning, setIsScanning] = useState(true);
 
@@ -151,7 +153,7 @@ export const QRScanner = ({ navigation, route }) => {
     setConfirmVisible(false);
     setScannedData(null);
     setGymPreview(null);
-    setSelectedParts([]);
+    setSelectedParts(partsFromDashboard ? initialParts : []);
     setIsScanning(true);
   };
 
@@ -197,7 +199,10 @@ export const QRScanner = ({ navigation, route }) => {
 
       {/* Bottom controls (moved from top for easier reach) */}
       <View style={styles.bottomBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.bottomButton}>
+        <TouchableOpacity
+          onPress={() => confirmVisible ? resetScanner() : navigation.goBack()}
+          style={styles.bottomButton}
+        >
           <Icon name="close" size={32} color={COLORS.white} />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setFlash((f) => !f)} style={styles.bottomButton}>
@@ -240,7 +245,7 @@ export const QRScanner = ({ navigation, route }) => {
       )}
 
       {/* Confirmation Modal */}
-      <Modal visible={confirmVisible} transparent animationType="fade">
+      <Modal visible={confirmVisible} transparent animationType="fade" onRequestClose={resetScanner}>
         <View style={styles.modalOverlay}>
           <View style={styles.confirmCard}>
             <View style={styles.confirmHeader}>
@@ -255,24 +260,32 @@ export const QRScanner = ({ navigation, route }) => {
             </View>
             {/* Body parts selection */}
             <View style={styles.partList}>
-              <Text style={[styles.confirmTitle, { fontSize: SIZES.body }]}>Which body parts today?</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={[styles.confirmTitle, { fontSize: SIZES.body }]}>
+                  {partsFromDashboard ? 'Body parts' : 'Which body parts today?'}
+                </Text>
+               
+              </View>
               <View style={{ height: 12 }} />
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {BODY_PARTS.map((part) => {
-                  const selected = selectedParts.includes(part);
-                  return (
-                    <TouchableOpacity
-                      key={part}
-                      onPress={() => togglePart(part)}
-                      style={[
-                        styles.partItem,
-                        selected ? styles.partItemSelected : null,
-                      ]}
-                    >
-                      <Text style={[styles.partText, selected ? styles.partTextSelected : null]}>{part}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                {partsFromDashboard
+                  ? selectedParts.map((part) => (
+                      <View key={part} style={[styles.partItem, styles.partItemSelected, styles.partItemReadOnly]}>
+                        <Text style={[styles.partText, styles.partTextSelected]}>{part}</Text>
+                      </View>
+                    ))
+                  : BODY_PARTS.map((part) => {
+                      const selected = selectedParts.includes(part);
+                      return (
+                        <TouchableOpacity
+                          key={part}
+                          onPress={() => togglePart(part)}
+                          style={[styles.partItem, selected ? styles.partItemSelected : null]}
+                        >
+                          <Text style={[styles.partText, selected ? styles.partTextSelected : null]}>{part}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
               </View>
             </View>
             <View style={styles.confirmActions}>
@@ -443,7 +456,10 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    // Use the app's background colour at near-full opacity so the frozen
+    // camera frame doesn't bleed through. A very slight transparency keeps
+    // it feeling like an overlay rather than a hard screen switch.
+    backgroundColor: 'rgba(15,15,26,0.96)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -454,6 +470,13 @@ const styles = StyleSheet.create({
     padding: 24,
     width: '100%',
     maxWidth: 340,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    elevation: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
   },
   confirmHeader: {
     alignItems: 'center',
@@ -522,12 +545,31 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
   },
+  partItemReadOnly: {
+    opacity: 0.85,
+  },
   partText: {
     color: COLORS.text,
     fontWeight: '600',
   },
   partTextSelected: {
     color: COLORS.white,
+  },
+  readOnlyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: COLORS.background,
+    borderRadius: SIZES.radiusSmall,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  readOnlyText: {
+    color: COLORS.textMuted,
+    fontSize: SIZES.caption,
+    fontWeight: '500',
   },
 });
 

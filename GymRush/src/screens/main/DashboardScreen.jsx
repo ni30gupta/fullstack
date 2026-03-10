@@ -1,12 +1,11 @@
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card, Avatar, GymRush, ActiveSessionCard } from '../../components';
+import { Avatar, GymRush, ActiveSessionCard, OverlayLoader } from '../../components';
 import { useAuth, useCheckin, useBodyPartLoad, useGeolocation } from '../../hooks';
 import { gymService } from '../../services';
 import { COLORS, SIZES } from '../../constants/theme';
 import { getDistanceMeters } from '../../utils';
 import { useState, useEffect, useCallback } from 'react';
-import Geolocation from 'react-native-geolocation-service';
 
 const GYM_CHECKIN_RADIUS_METERS = 50;
 
@@ -14,20 +13,13 @@ export const DashboardScreen = ({ navigation }) => {
   const { user, membership, activeGymId, refreshProfile } = useAuth();
   const { lastCheckin, checkedIn: isCheckedIn, checkIn, checkOut, loading: checkInLoading, setCheckin, clearCheckin } = useCheckin();
   const { getCurrentRush, loading: rushLoading } = useBodyPartLoad();
-  const { locPermModal, setLocPermModal, getLocation, requestPermission, loading: locationLoading } = useGeolocation();
+  const { getLocation, requestPermission, loading: locationLoading } = useGeolocation();
   const [selectedParts, setSelectedParts] = useState([]);
 
-  const requestLiveLocation = useCallback(async () => {
-    // TODO: implement your own location permission + enabling logic here
-    setLocPermModal(false);
-    
-  }, []);
-
   // Ask for location permission as soon as the dashboard mounts (member only).
-  // This surfaces the system dialog early so the user understands why it's needed.
+  // This surfaces the permission + GPS dialogs before the user taps Check In.
   useEffect(() => {
     if (membership?.is_active) {
-      console.log('###### membership',membership?.is_active)
       requestPermission();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -73,10 +65,7 @@ export const DashboardScreen = ({ navigation }) => {
   }, [refreshProfile, setCheckin, clearCheckin, getCurrentRush]);
 
   const handleCheckIn = useCallback(async () => {
-    console.log('[handleCheckIn] triggered — selectedParts:', selectedParts);
-
     if (!membership?.is_active) {
-      console.warn('[handleCheckIn] No active membership, aborting.');
       Alert.alert('No active membership', 'You must have an active membership to check in.');
       return;
     }
@@ -84,14 +73,11 @@ export const DashboardScreen = ({ navigation }) => {
     const gymLat = parseFloat(membership?.latitude);
     const gymLng = parseFloat(membership?.longitude);
     const hasGymCoords = !isNaN(gymLat) && !isNaN(gymLng);
-    console.log('[handleCheckIn] gym coords:', { gymLat, gymLng, hasGymCoords });
+    console.log('[CheckIn] gym coords available:', hasGymCoords, { gymLat, gymLng });
 
-    // Always attempt to get location — this triggers the permission dialog
-    // if it hasn't been granted yet.
     try {
-      console.log('[handleCheckIn] requesting location…');
       const position = await getLocation();
-      console.log('[handleCheckIn] location obtained:', position);
+      console.log('[CheckIn] user position:', position);
 
       if (hasGymCoords) {
         const distance = getDistanceMeters(
@@ -100,20 +86,17 @@ export const DashboardScreen = ({ navigation }) => {
           gymLat,
           gymLng,
         );
-        console.log('[handleCheckIn] distance to gym:', distance, 'm (threshold:', GYM_CHECKIN_RADIUS_METERS, 'm)');
+        console.log(`[CheckIn] distance to gym: ${Math.round(distance)} m (limit: ${GYM_CHECKIN_RADIUS_METERS} m)`);
 
         if (distance <= GYM_CHECKIN_RADIUS_METERS) {
-          // ✅ Within range — check in directly
-          console.log('[handleCheckIn] within radius, checking in — activeGymId:', activeGymId);
+          console.log('[CheckIn] within radius → checking in');
           await checkIn(activeGymId, selectedParts);
-          console.log('[handleCheckIn] check-in successful');
           setSelectedParts([]);
         } else {
-          // ❌ Too far — fallback to QR scan
-          console.warn('[handleCheckIn] too far from gym (', Math.round(distance), 'm), prompting QR scan.');
+          console.log('[CheckIn] too far → QR fallback');
           Alert.alert(
-            'Not at gym location',
-            `You appear to be ${Math.round(distance)} m away from the gym. Please scan the QR code to check in.`,
+            'Not at gym location!',
+            `You're probably ${Math.round(distance)} m away from gym. \n Try to be in range of ${GYM_CHECKIN_RADIUS_METERS} m or use QR scan to check in instead.`,
             [
               { text: 'Cancel', style: 'cancel' },
               {
@@ -124,15 +107,16 @@ export const DashboardScreen = ({ navigation }) => {
           );
         }
       } else {
-        // Gym has no coordinates stored — location obtained but can't verify
-        // distance, fall back to QR.
-        console.warn('[handleCheckIn] gym has no stored coordinates, falling back to QR scan.');
+        // Gym has no coordinates stored — fall back to QR
+        console.log('[CheckIn] no gym coords → QR fallback');
         navigation.navigate('QRScanner', { initialParts: selectedParts });
       }
     } catch (e) {
-      // Location permission denied or GPS error — fallback to QR scan
+      // Skip alert if the hook already showed one (e.g. GPS-off dialog)
+      if (e?.handled) return;
+
       const isDenied = e?.message?.toLowerCase().includes('denied');
-      console.error('[handleCheckIn] location error:', e?.message, '| isDenied:', isDenied);
+      console.warn('[CheckIn] location error:', e?.message);
       Alert.alert(
         isDenied ? 'Location permission required' : 'Could not get location',
         isDenied
@@ -189,38 +173,16 @@ export const DashboardScreen = ({ navigation }) => {
           <TouchableOpacity
             style={[styles.checkInButton, styles.checkinBarButton]}
             onPress={handleCheckIn}
-            disabled={checkInLoading || locationLoading}
           >
-            <Text style={styles.checkInButtonText}>{locationLoading ? '📍...' : checkInLoading ? '...' : 'Check In'}</Text>
+            <Text style={styles.checkInButtonText}>Check In</Text>
           </TouchableOpacity>
         </View>
       )}
 
-
-      {/* <Modal
-        animationType="slide"
-        transparent={false}
-        visible={locPermModal}
-        onRequestClose={() => setLocPermModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Use your location</Text>
-            <Text style={styles.modalBody}>Permission info line 1</Text>
-            <Text style={styles.modalBody}>Permission info line 2</Text>
-          </View>
-          <View style={styles.modalActions}>
-            <TouchableOpacity style={styles.modalButtonDeny} onPress={() => setLocPermModal(false)}>
-              <Text style={styles.modalButtonDenyText}>Deny</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalButtonAccept} onPress={requestLiveLocation}>
-              <Text style={styles.modalButtonAcceptText}>Accept</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal> */}
-
-
+      <OverlayLoader
+        visible={locationLoading || checkInLoading}
+        message={locationLoading ? 'Getting your location…' : 'Checking in…'}
+      />
     </SafeAreaView>
   );
 };
@@ -289,66 +251,6 @@ const styles = StyleSheet.create({
   checkInButtonText: {
     color: COLORS.primary,
     fontWeight: '700',
-    fontSize: SIZES.body,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    justifyContent: 'space-between',
-  },
-  modalContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: SIZES.padding * 2,
-    gap: SIZES.paddingSmall,
-  },
-  modalTitle: {
-    fontSize: SIZES.h4,
-    fontWeight: '700',
-    color: COLORS.text,
-    textAlign: 'center',
-    marginBottom: SIZES.paddingSmall,
-  },
-  modalBody: {
-    fontSize: SIZES.body,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: SIZES.padding,
-    paddingVertical: SIZES.paddingLarge,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    backgroundColor: COLORS.card,
-  },
-  modalButtonDeny: {
-    flex: 1,
-    marginRight: SIZES.paddingSmall,
-    paddingVertical: SIZES.paddingSmall,
-    borderRadius: SIZES.radius,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    alignItems: 'center',
-  },
-  modalButtonDenyText: {
-    color: COLORS.primary,
-    fontWeight: '600',
-    fontSize: SIZES.body,
-  },
-  modalButtonAccept: {
-    flex: 1,
-    marginLeft: SIZES.paddingSmall,
-    paddingVertical: SIZES.paddingSmall,
-    borderRadius: SIZES.radius,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-  },
-  modalButtonAcceptText: {
-    color: COLORS.white,
-    fontWeight: '600',
     fontSize: SIZES.body,
   },
 });
