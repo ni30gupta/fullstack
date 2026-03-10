@@ -2,6 +2,7 @@ import React from 'react';
 import { StatusBar, View, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, CheckinProvider } from './src/context';
+import { BodyPartLoadProvider } from './src/hooks/useBodyPartLoad';
 import { RootNavigator } from './src/navigation';
 import { COLORS } from './src/constants/theme';
 
@@ -32,7 +33,9 @@ const App = () => {
         <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
         <AuthProvider>
           <CheckinProvider>
-            <RootNavigator />
+            <BodyPartLoadProvider>
+              <RootNavigator />
+            </BodyPartLoadProvider>
           </CheckinProvider>
         </AuthProvider>
       </SafeAreaProvider>
