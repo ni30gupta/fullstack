@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect,  useRef } from 'react';
 import { Alert, Linking } from 'react-native';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import Geolocation from '@react-native-community/geolocation';
@@ -13,11 +13,11 @@ Geolocation.setRNConfiguration({
 export function useGeolocation() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
+  let warmupWatchId = useRef(null);
 
   useEffect(() => {
     return () => {
-      if (warmupWatchId.current !== null) {
+      if (warmupWatchId && warmupWatchId.current !== null) {
         Geolocation.clearWatch(warmupWatchId.current);
         warmupWatchId.current = null;
       }

@@ -4,6 +4,11 @@
 
 3. map user to single device, means only device can be logged in at a time
 
+4. apply auto logout if time exceeded to 100 minutes, or prefreed time range*1.5 
+5. add updates tab in bottom bar, to showcase general notification or update from gym t0 users
+
+
+
 
 
 

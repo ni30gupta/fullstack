@@ -117,18 +117,24 @@ class LoginView(APIView):
 
 
 class LogoutView(APIView):
+    """Invalidate the provided refresh token (blacklist it).
+
+    POST /api/auth/logout/ with body { "refresh": "<token>" }
+    Requires authentication so we can know which user is logging out.
+    """
     permission_classes = (permissions.IsAuthenticated,)
 
     def post(self, request):
+        refresh_token = request.data.get('refresh')
+        if not refresh_token:
+            return Response({'detail': 'Refresh token is required.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            request.user.auth_token.delete()
-            return Response({
-                'message': 'Logout successful'
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+            # if blacklist app is enabled this will store the token in the blacklist
+            token_obj = RefreshToken(refresh_token)
+            token_obj.blacklist()
+            return Response({'message': 'Logout successful.'}, status=status.HTTP_200_OK)
+        except Exception as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class UserProfileView(generics.RetrieveAPIView):
