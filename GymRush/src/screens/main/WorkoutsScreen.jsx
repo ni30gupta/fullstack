@@ -15,24 +15,32 @@ const WorkoutItem = ({ workout }) => {
     });
   };
 
-  const formatDuration = (minutes) => {
-    const hrs = Math.floor(minutes / 60);
-    const mins = minutes % 60;
+  const formatTime = (dateString) => {
+    if (!dateString) return '--';
+    const d = new Date(dateString);
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatDuration = (seconds) => {
+    if (seconds == null) return '--';
+    const mins = Math.floor(seconds / 60);
+    const hrs = Math.floor(mins / 60);
+    const rem = mins % 60;
     if (hrs > 0) {
-      return `${hrs}h ${mins}m`;
+      return `${hrs}h ${rem}m`;
     }
-    return `${mins}m`;
+    return `${rem}m`;
   };
 
   return (
     <Card style={styles.workoutCard}>
       <View style={styles.workoutHeader}>
         <View style={styles.workoutInfo}>
-          <Text style={styles.workoutType}>{workout.type}</Text>
+          <Text style={styles.workoutType}>{workout.type || 'Workout'}</Text>
           <Text style={styles.workoutDate}>{formatDate(workout.date)}</Text>
         </View>
         <Badge
-          label={formatDuration(workout.duration)}
+          label={formatDuration(workout.totalTime)}
           variant="primary"
           size="small"
         />
@@ -40,24 +48,14 @@ const WorkoutItem = ({ workout }) => {
 
       <View style={styles.workoutDetails}>
         <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Calories</Text>
-          <Text style={styles.detailValue}>{workout.caloriesBurned}</Text>
+          <Text style={styles.detailLabel}>Start</Text>
+          <Text style={styles.detailValue}>{formatTime(workout.startedAt)}</Text>
         </View>
         <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Exercises</Text>
-          <Text style={styles.detailValue}>{workout.exerciseCount}</Text>
+          <Text style={styles.detailLabel}>End</Text>
+          <Text style={styles.detailValue}>{formatTime(workout.endedAt)}</Text>
         </View>
-        {workout.personalBests > 0 && (
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>PRs</Text>
-            <Text style={[styles.detailValue, styles.prValue]}>🏆 {workout.personalBests}</Text>
-          </View>
-        )}
       </View>
-
-      {workout.notes && (
-        <Text style={styles.notes}>{workout.notes}</Text>
-      )}
     </Card>
   );
 };

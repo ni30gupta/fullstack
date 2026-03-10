@@ -51,6 +51,7 @@ export const config = {
   GYM_SESSIONS: '/api/gym/sessions/',
   GYM_TRAINERS: '/api/gym/trainers/',
   GYMS_MY_ACTIVITY: '/api/gyms/my-activity/',
+  GYMS_MY_WORKOUTS: '/api/gyms/my-workouts/',
   TRAINER_SLOTS: '/api/gym/trainers/:id/slots/',
   BOOKINGS: '/api/gym/bookings/',
   BOOKING_DELETE: '/api/gym/bookings/:id/',

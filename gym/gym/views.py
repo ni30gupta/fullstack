@@ -11,7 +11,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 from .models import Gym, Membership, GymActivity, BodyPart
-from .serializers import GymSerializer, MembershipSerializer, SubscribeSerializer, ActivateMemberSerializer
+from .serializers import (ActivateMemberSerializer, ActivityHistorySerializer, GymSerializer,
+    MembershipSerializer, SubscribeSerializer)
 from .serializers import CheckInSerializer, GymLoadSerializer
 from .serializers import CurrentActivitySerializer
 from .utils import has_active_membership_or_owner_or_staff
@@ -581,6 +582,42 @@ class MyActivityView(APIView):
             return Response({})
 
         serializer = CurrentActivitySerializer(first)
+        return Response(serializer.data)
+
+
+class MyWorkoutHistoryView(APIView):
+    """Return the authenticated user's full gym activity history.
+
+    GET /api/gyms/my-workouts/  (or similar path)
+
+    Response is a list of activity records ordered newest first. Each
+    record contains:
+        date (YYYY-MM-DD), body_part, started_at, ended_at, total_time (secs)
+    """
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        # include all activities (ended and active) ordered by start time desc
+        qs = GymActivity.objects.filter(user=user).order_by('-started_at').select_related('body_part')
+
+        results = []
+        for act in qs:
+            total = None
+            if act.ended_at:
+                total = int((act.ended_at - act.started_at).total_seconds())
+            # skip if workout was shorter than 5 minutes (300 seconds)
+            if total is not None and total < 300:
+                continue
+            results.append({
+                'date': act.started_at.date(),
+                'body_part': act.body_part.name if act.body_part else None,
+                'started_at': act.started_at,
+                'ended_at': act.ended_at,
+                'total_time': total,
+            })
+
+        serializer = ActivityHistorySerializer(results, many=True)
         return Response(serializer.data)
 
 

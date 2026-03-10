@@ -40,7 +40,7 @@ export const MainNavigator = () => {
           ),
         }}
       />
-      <Tab.Screen
+      {/* <Tab.Screen
         name="Trainers"
         component={TrainersScreen}
         options={{
@@ -48,7 +48,7 @@ export const MainNavigator = () => {
             <TabIcon icon="👨‍🏫" label="Trainers" focused={focused} />
           ),
         }}
-      />
+      /> */}
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}

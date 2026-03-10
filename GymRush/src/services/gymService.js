@@ -95,6 +95,15 @@ export const gymService = {
     }
   },
 
+  async getMyWorkouts() {
+    try {
+      const response = await api.get(ENDPOINTS.GYMS_MY_WORKOUTS);
+      return response.data;
+    } catch (error) {
+      throw handleError(error);
+    }
+  },
+
   async getTrainers() {
     try {
       const response = await api.get(ENDPOINTS.GYM_TRAINERS);

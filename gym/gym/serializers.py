@@ -116,3 +116,19 @@ class CurrentActivitySerializer(serializers.Serializer):
     started_at = serializers.DateTimeField()
     body_parts = serializers.ListField(child=serializers.CharField())
     activity_ids = serializers.ListField(child=serializers.IntegerField())
+
+
+class ActivityHistorySerializer(serializers.Serializer):
+    """Serializer for returning a user's past gym activity entries.
+
+    Each record corresponds to a single GymActivity row. The response is
+    ordered from newest to oldest by ``started_at``.
+
+    Fields match the frontend requirements: date, body_part, started_at,
+    ended_at and total_time (in seconds).
+    """
+    date = serializers.DateField()
+    body_part = serializers.CharField()
+    started_at = serializers.DateTimeField()
+    ended_at = serializers.DateTimeField(allow_null=True)
+    total_time = serializers.IntegerField(allow_null=True)
