@@ -100,6 +100,10 @@ export const ProfileScreen = () => {
       navigation.navigate('EditProfile');
       return;
     }
+    if (item === 'Membership') {
+      navigation.navigate('Membership');
+      return;
+    }
     Alert.alert('Coming Soon', `${item} feature is coming soon!`);
   };
 
@@ -190,14 +194,8 @@ export const ProfileScreen = () => {
             <MenuItem
               icon="💳"
               title="Membership"
-              subtitle="View plans & billing"
+              subtitle="View membership details"
               onPress={() => handleMenuItem('Membership')}
-            />
-            <MenuItem
-              icon="📅"
-              title="My Bookings"
-              subtitle="Trainer sessions & classes"
-              onPress={() => handleMenuItem('Bookings')}
             />
             <MenuItem
               icon="🎯"

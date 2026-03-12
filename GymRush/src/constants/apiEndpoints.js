@@ -15,11 +15,7 @@ const ENDPOINTS = {
   GYM_CHECKIN: '/api/gyms/:id/checkin/',
   GYM_CHECKOUT: '/api/gym/check-out/:id/',
   GYM_SESSIONS: '/api/gym/sessions/',
-  GYM_TRAINERS: '/api/gym/trainers/',
   GYMS_MY_ACTIVITY: '/api/gyms/my-activity/',
-  TRAINER_SLOTS: '/api/gym/trainers/:id/slots/',
-  BOOKINGS: '/api/gym/bookings/',
-  BOOKING_DELETE: '/api/gym/bookings/:id/',
   GYM_DETAIL: '/api/gyms/:id/',
 };
 

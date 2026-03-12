@@ -1,6 +1,6 @@
 # GymRush - Fitness Tracking App
 
-A modern React Native application for gym members to track workouts, book trainers, and manage their fitness journey.
+A modern React Native application for gym members to track workouts, receive updates, and manage their fitness journey.
 
 ## 🏗️ Project Structure
 
@@ -40,11 +40,9 @@ src/
   - Duration tracking
   - Notes and details
 
-- **Trainer Booking**
-  - Browse trainers
-  - View availability
-  - Book sessions
-  - Manage bookings
+- **Updates**
+  - Browse gym announcements
+  - Receive alerts and news
 
 - **Profile Management**
   - View/edit profile
@@ -114,7 +112,7 @@ Modify colors and styles in \`src/constants/theme.ts\`.
 ### Main Screens
 - **Dashboard** - Stats, check-in, recent activity
 - **Workouts** - Session history list
-- **Trainers** - Browse and book trainers
+- **Updates** - See announcements and alerts
 - **Profile** - User settings and info
 
 ## 🏛️ Architecture
@@ -138,7 +136,6 @@ RootNavigator
 └── MainNavigator (when logged in)
     ├── DashboardScreen
     ├── WorkoutsScreen
-    ├── TrainersScreen
     └── ProfileScreen
 \`\`\`
 

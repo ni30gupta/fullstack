@@ -177,6 +177,7 @@ class UserProfileView(generics.RetrieveAPIView):
                 response_data['active_membership'] = {
                     'gym_id': active_obj.gym.id,
                     'gym_name': active_obj.gym.name,
+                    'gym_owner_name': active_obj.gym.owner.username if active_obj.gym.owner else None,
                     'is_active': active_obj.is_active,
                     'start_date': active_obj.start_date.isoformat() if active_obj.start_date else None,
                     'end_date': active_obj.end_date.isoformat() if active_obj.end_date else None,

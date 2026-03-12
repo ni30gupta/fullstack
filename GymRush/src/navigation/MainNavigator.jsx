@@ -1,7 +1,7 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet } from 'react-native';
-import { DashboardScreen, WorkoutsScreen, TrainersScreen, ProfileScreen } from '../screens';
+import { DashboardScreen, WorkoutsScreen, UpdatesScreen, ProfileScreen } from '../screens';
 import { COLORS, SIZES } from '../constants/theme';
 
 const Tab = createBottomTabNavigator();
@@ -40,15 +40,15 @@ export const MainNavigator = () => {
           ),
         }}
       />
-      {/* <Tab.Screen
-        name="Trainers"
-        component={TrainersScreen}
+      <Tab.Screen
+        name="Updates"
+        component={UpdatesScreen}
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="👨‍🏫" label="Trainers" focused={focused} />
+            <TabIcon icon="🔔" label="Updates" focused={focused} />
           ),
         }}
-      /> */}
+      />
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}

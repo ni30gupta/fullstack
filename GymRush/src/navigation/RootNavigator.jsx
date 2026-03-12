@@ -7,6 +7,7 @@ import QRScanner from '../screens/common/QRScanner';
 import BodyPartActivitiesScreen from '../screens/main/BodyPartActivitiesScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
 import { EditProfileScreen } from '../screens/main/EditProfileScreen';
+import { MembershipScreen } from '../screens/main/MembershipScreen';
 import { useAuth } from '../hooks';
 import { Loading } from '../components';
 import { COLORS } from '../constants/theme';
@@ -54,6 +55,11 @@ export const RootNavigator = () => {
             <Stack.Screen 
               name="EditProfile" 
               component={EditProfileScreen}
+              options={{ gestureEnabled: true, animation: 'slide_from_right' }}
+            />
+            <Stack.Screen 
+              name="Membership"
+              component={MembershipScreen}
               options={{ gestureEnabled: true, animation: 'slide_from_right' }}
             />
           </>

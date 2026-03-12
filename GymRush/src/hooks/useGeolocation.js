@@ -102,16 +102,31 @@ export function useGeolocation() {
           );
         });
 
+      // small helper to pause a bit before retrying the radio
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+
       let coords;
       try {
         coords = await fetchPosition(true);
         console.log('[Geolocation] GPS position:', coords);
       } catch (gpsErr) {
         if (gpsErr?.code === 2) {
-          // No GPS fix yet — retry with network/cell location
-          console.warn('[Geolocation] GPS unavailable (cold start), retrying with network location…');
-          coords = await fetchPosition(false);
-          console.log('[Geolocation] network position:', coords);
+          // cold start - give the GPS a moment and try high accuracy once more
+          console.warn('[Geolocation] GPS unavailable (cold start), retrying in 2s…');
+          await wait(2000);
+          try {
+            coords = await fetchPosition(true);
+            console.log('[Geolocation] GPS position (second attempt):', coords);
+          } catch (gpsErr2) {
+            if (gpsErr2?.code === 2) {
+              // still no fix - fall back to network provider
+              console.warn('[Geolocation] still no GPS fix, falling back to network location…');
+              coords = await fetchPosition(false);
+              console.log('[Geolocation] network position:', coords);
+            } else {
+              throw gpsErr2;
+            }
+          }
         } else {
           throw gpsErr;
         }

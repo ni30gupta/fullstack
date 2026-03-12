@@ -104,14 +104,7 @@ export const gymService = {
     }
   },
 
-  async getTrainers() {
-    try {
-      const response = await api.get(ENDPOINTS.GYM_TRAINERS);
-      return response.data;
-    } catch (error) {
-      throw handleError(error);
-    }
-  },
+  // trainer APIs have been removed; this app now displays generic updates instead
 
   async getMyActivity() {
     try {
@@ -173,44 +166,6 @@ export const gymService = {
     }
   },
 
-  async getTrainerSlots(trainerId, date) {
-    try {
-      const response = await api.get(`${buildEndpoint(ENDPOINTS.TRAINER_SLOTS, { id: trainerId })}?date=${encodeURIComponent(date)}`);
-      return response.data;
-    } catch (error) {
-      throw handleError(error);
-    }
-  },
-
-  async bookTrainerSlot(trainerId, slotId, notes) {
-    try {
-      const response = await api.post(ENDPOINTS.BOOKINGS, {
-        trainer_id: trainerId,
-        slot_id: slotId,
-        notes,
-      });
-      return response.data;
-    } catch (error) {
-      throw handleError(error);
-    }
-  },
-
-  async getMyBookings() {
-    try {
-      const response = await api.get(ENDPOINTS.BOOKINGS);
-      return response.data;
-    } catch (error) {
-      throw handleError(error);
-    }
-  },
-
-  async cancelBooking(bookingId) {
-    try {
-      await api.delete(buildEndpoint(ENDPOINTS.BOOKING_DELETE, { id: bookingId }));
-    } catch (error) {
-      throw handleError(error);
-    }
-  },
 };
 
 export default gymService;
