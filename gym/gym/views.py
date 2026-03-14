@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 from .models import Gym, Membership, Member, GymActivity, BodyPart
 from notifications.models import Notification
 from .serializers import (ActivateMemberSerializer, ActivityHistorySerializer, GymSerializer,
-    MembershipSerializer, MemberSerializer, MemberCreateSerializer, SubscribeSerializer)
+    MembershipSerializer, MemberSerializer, MemberCreateSerializer, SubscribeSerializer,
+    EnrollMemberSerializer, UpdateMemberSerializer,
+    MembershipCreateForMemberSerializer, MembershipUpdateSerializer)
 from .serializers import CheckInSerializer, GymLoadSerializer
 from .serializers import CurrentActivitySerializer
 from .utils import has_active_membership_or_owner_or_staff
@@ -500,6 +502,210 @@ class GymViewSet(viewsets.ModelViewSet):
         membership.save()
         
         return Response({'detail': 'Member removed successfully.'}, status=status.HTTP_200_OK)
+
+    # ==================== New Member + Membership Management ====================
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated],
+            url_path='enroll-member')
+    def enroll_member(self, request, pk=None):
+        """Enroll a new member with an immediate membership in one transaction.
+
+        POST /api/gyms/{gym_id}/enroll-member/
+        { name, phone, email?, duration_months, amount?, amount_paid?, start_date?, is_active }
+        """
+        gym = self.get_object()
+        if not (request.user.is_staff or gym.owner == request.user):
+            return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = EnrollMemberSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+
+        phone = d['phone']
+        name = d['name']
+        email = d.get('email') or ''
+
+        from django.db import transaction
+        from user.models import UserProfile
+        import secrets
+        from datetime import date
+        from dateutil.relativedelta import relativedelta
+
+        with transaction.atomic():
+            # Check if this phone is already a member of this gym
+            if Member.objects.filter(gym=gym, phone=phone).exists():
+                return Response(
+                    {'detail': 'A member with this phone number already exists in this gym.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Reuse an existing user if they've been enrolled in any gym before
+            existing_member = Member.objects.filter(phone=phone).select_related('user').first()
+            if existing_member:
+                existing_user = existing_member.user
+                member = Member.objects.create(
+                    gym=gym, user=existing_user, name=name, phone=phone,
+                    email=email or existing_user.email or ''
+                )
+            else:
+                username = f"member_{phone}"
+                if User.objects.filter(username=username).exists():
+                    username = f"member_{phone}_{secrets.token_hex(3)}"
+                user = User.objects.create(username=username, email=email)
+                user.set_unusable_password()
+                user.save()
+                UserProfile.objects.create(
+                    user=user, name=name, gender='OTHER',
+                    preferred_time='ANYTIME', preferred_days='MON',
+                )
+                member = Member.objects.create(
+                    gym=gym, user=user, name=name, phone=phone, email=email or None
+                )
+
+            is_active = d.get('is_active', True)
+            start_date = d.get('start_date') or date.today()
+            duration_months = d['duration_months']
+            Membership.objects.create(
+                member=member,
+                gym=gym,
+                duration_months=duration_months,
+                amount=d.get('amount'),
+                amount_paid=d.get('amount_paid'),
+                is_active=is_active,
+                start_date=start_date if is_active else None,
+                end_date=(start_date + relativedelta(months=duration_months)) if is_active else None,
+            )
+
+        member.refresh_from_db()
+        return Response(MemberSerializer(member).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['patch'], permission_classes=[permissions.IsAuthenticated],
+            url_path='update-member/(?P<member_id>[^/.]+)')
+    def update_member(self, request, pk=None, member_id=None):
+        """Update member name / phone / email.
+        PATCH /api/gyms/{gym_id}/update-member/{member_id}/
+        """
+        gym = self.get_object()
+        if not (request.user.is_staff or gym.owner == request.user):
+            return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            member = Member.objects.prefetch_related('memberships').get(id=member_id, gym=gym)
+        except Member.DoesNotExist:
+            return Response({'detail': 'Member not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = UpdateMemberSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+        for field in ('name', 'phone', 'email'):
+            if field in d:
+                setattr(member, field, d[field])
+        member.save()
+        member.refresh_from_db()
+        return Response(MemberSerializer(member).data)
+
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated],
+            url_path='member-detail/(?P<member_id>[^/.]+)')
+    def member_detail(self, request, pk=None, member_id=None):
+        """Get member with all their memberships.
+        GET /api/gyms/{gym_id}/member-detail/{member_id}/
+        """
+        gym = self.get_object()
+        if not (request.user.is_staff or gym.owner == request.user):
+            return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            member = Member.objects.prefetch_related('memberships').get(id=member_id, gym=gym)
+        except Member.DoesNotExist:
+            return Response({'detail': 'Member not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        memberships = member.memberships.order_by('-created_at')
+        return Response({
+            'member': MemberSerializer(member).data,
+            'memberships': MembershipSerializer(memberships, many=True).data,
+        })
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated],
+            url_path='member-membership/(?P<member_id>[^/.]+)')
+    def add_membership_for_member(self, request, pk=None, member_id=None):
+        """Add a new membership period to an existing member.
+        POST /api/gyms/{gym_id}/member-membership/{member_id}/
+        """
+        gym = self.get_object()
+        if not (request.user.is_staff or gym.owner == request.user):
+            return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            member = Member.objects.get(id=member_id, gym=gym)
+        except Member.DoesNotExist:
+            return Response({'detail': 'Member not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = MembershipCreateForMemberSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+
+        from datetime import date
+        from dateutil.relativedelta import relativedelta
+        is_active = d.get('is_active', True)
+        start_date = d.get('start_date') or date.today()
+        duration_months = d['duration_months']
+        membership = Membership.objects.create(
+            member=member,
+            gym=gym,
+            duration_months=duration_months,
+            amount=d.get('amount'),
+            amount_paid=d.get('amount_paid'),
+            is_active=is_active,
+            start_date=start_date if is_active else None,
+            end_date=(start_date + relativedelta(months=duration_months)) if is_active else None,
+        )
+        return Response(MembershipSerializer(membership).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['patch'], permission_classes=[permissions.IsAuthenticated],
+            url_path='update-membership/(?P<membership_id>[^/.]+)')
+    def update_membership_detail(self, request, pk=None, membership_id=None):
+        """Update membership fields (duration, amount, amount_paid, dates, is_active).
+        PATCH /api/gyms/{gym_id}/update-membership/{membership_id}/
+        """
+        gym = self.get_object()
+        if not (request.user.is_staff or gym.owner == request.user):
+            return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            membership = Membership.objects.get(
+                Q(id=membership_id) & (Q(gym=gym) | Q(member__gym=gym))
+            )
+        except Membership.DoesNotExist:
+            return Response({'detail': 'Membership not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = MembershipUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+
+        from datetime import date
+        from dateutil.relativedelta import relativedelta
+
+        if 'duration_months' in d:
+            membership.duration_months = d['duration_months']
+        if 'amount' in d:
+            membership.amount = d['amount']
+        if 'amount_paid' in d:
+            membership.amount_paid = d['amount_paid']
+        if 'start_date' in d and d['start_date']:
+            membership.start_date = d['start_date']
+        # Recalculate end_date whenever start or duration changes
+        if membership.start_date and membership.duration_months:
+            membership.end_date = membership.start_date + relativedelta(months=membership.duration_months)
+        if 'is_active' in d:
+            if d['is_active'] and not membership.is_active:
+                if not membership.start_date:
+                    membership.start_date = date.today()
+                    membership.end_date = membership.start_date + relativedelta(months=membership.duration_months)
+                membership.is_active = True
+            else:
+                membership.is_active = d['is_active']
+        membership.save()
+        return Response(MembershipSerializer(membership).data)
 
     @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated],
             url_path='rush-data')

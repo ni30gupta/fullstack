@@ -155,7 +155,8 @@ class Membership(models.Model):
     start_date = models.DateField(null=True, blank=True)  # Set when activated by gym owner
     end_date = models.DateField(null=True, blank=True)  # Calculated from start_date + duration
     is_active = models.BooleanField(default=False)  # Initially inactive until gym owner verifies
-    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # Payment amount
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # Total fee agreed
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # Amount collected so far
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:

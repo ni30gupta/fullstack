@@ -81,8 +81,7 @@ class Command(BaseCommand):
             )
             if created:
                 user.set_password('password')
-                setattr(user, 'phone', phone)  # assumes custom User model has phone
-                # also set profile name if profile exists
+                # phone lives on UserProfile, not on User
                 try:
                     profile = user.profile
                     profile.name = full_name

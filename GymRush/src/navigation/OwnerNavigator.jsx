@@ -1,11 +1,13 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, Text, StyleSheet } from 'react-native';
-import { OwnerDashboardScreen, MembersListScreen } from '../screens/owner';
+import { OwnerDashboardScreen, MembersListScreen, MemberDetailScreen, EnrollMemberScreen } from '../screens/owner';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
 import { COLORS, SIZES } from '../constants/theme';
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
 const TabIcon = ({ icon, label, focused }) => (
   <View style={styles.tabItem}>
@@ -14,7 +16,7 @@ const TabIcon = ({ icon, label, focused }) => (
   </View>
 );
 
-export const OwnerNavigator = () => (
+const OwnerTabs = () => (
   <Tab.Navigator
     screenOptions={{
       headerShown: false,
@@ -50,6 +52,14 @@ export const OwnerNavigator = () => (
       }}
     />
   </Tab.Navigator>
+);
+
+export const OwnerNavigator = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="OwnerTabs" component={OwnerTabs} />
+    <Stack.Screen name="MemberDetail" component={MemberDetailScreen} />
+    <Stack.Screen name="EnrollMember" component={EnrollMemberScreen} />
+  </Stack.Navigator>
 );
 
 const styles = StyleSheet.create({

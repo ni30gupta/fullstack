@@ -185,6 +185,51 @@ export const gymService = {
     }
   },
 
+  async getMemberDetail(gymId, memberId) {
+    try {
+      const response = await api.get(`/api/gyms/${gymId}/member-detail/${memberId}/`);
+      return response.data;
+    } catch (error) {
+      throw handleError(error);
+    }
+  },
+
+  async enrollMember(gymId, payload) {
+    try {
+      const response = await api.post(`/api/gyms/${gymId}/enroll-member/`, payload);
+      return response.data;
+    } catch (error) {
+      throw handleError(error);
+    }
+  },
+
+  async updateMember(gymId, memberId, payload) {
+    try {
+      const response = await api.patch(`/api/gyms/${gymId}/update-member/${memberId}/`, payload);
+      return response.data;
+    } catch (error) {
+      throw handleError(error);
+    }
+  },
+
+  async addMembershipForMember(gymId, memberId, payload) {
+    try {
+      const response = await api.post(`/api/gyms/${gymId}/member-membership/${memberId}/`, payload);
+      return response.data;
+    } catch (error) {
+      throw handleError(error);
+    }
+  },
+
+  async updateMembership(gymId, membershipId, payload) {
+    try {
+      const response = await api.patch(`/api/gyms/${gymId}/update-membership/${membershipId}/`, payload);
+      return response.data;
+    } catch (error) {
+      throw handleError(error);
+    }
+  },
+
 };
 
 export default gymService;

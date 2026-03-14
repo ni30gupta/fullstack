@@ -51,14 +51,36 @@ class MemberSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     user_email = serializers.CharField(source='user.email', read_only=True, allow_null=True)
     gym_name = serializers.CharField(source='gym.name', read_only=True)
+    has_active_membership = serializers.SerializerMethodField()
+    latest_membership = serializers.SerializerMethodField()
 
     class Meta:
         model = Member
         fields = (
             'id', 'gym', 'gym_name', 'user', 'user_username', 'user_email',
-            'name', 'phone', 'email', 'created_at', 'updated_at',
+            'name', 'phone', 'email', 'has_active_membership', 'latest_membership',
+            'created_at', 'updated_at',
         )
         read_only_fields = ('gym', 'user', 'created_at', 'updated_at')
+
+    def get_has_active_membership(self, obj):
+        return any(m.is_active for m in obj.memberships.all())
+
+    def get_latest_membership(self, obj):
+        memberships = list(obj.memberships.all())
+        if not memberships:
+            return None
+        active = [m for m in memberships if m.is_active]
+        ms = active[0] if active else sorted(memberships, key=lambda m: m.created_at, reverse=True)[0]
+        return {
+            'id': ms.id,
+            'duration_months': ms.duration_months,
+            'start_date': ms.start_date.isoformat() if ms.start_date else None,
+            'end_date': ms.end_date.isoformat() if ms.end_date else None,
+            'amount': str(ms.amount) if ms.amount is not None else None,
+            'amount_paid': str(ms.amount_paid) if ms.amount_paid is not None else None,
+            'is_active': ms.is_active,
+        }
 
 
 class MemberCreateSerializer(serializers.ModelSerializer):
@@ -93,9 +115,9 @@ class MembershipSerializer(serializers.ModelSerializer):
             'id', 'member', 'member_id', 'member_name', 'member_phone',
             'user', 'user_username', 'user_email', 'gym', 'gym_name',
             'duration_months', 'start_date', 'end_date', 'is_active',
-            'amount', 'created_at',
+            'amount', 'amount_paid', 'created_at',
         )
-        read_only_fields = ('gym', 'start_date', 'end_date', 'created_at', 'member')
+        read_only_fields = ('gym', 'created_at', 'member')
 
     def get_user_username(self, obj):
         """Get username - prefer member.user, fallback to direct user."""
@@ -183,3 +205,45 @@ class ActivityHistorySerializer(serializers.Serializer):
     started_at = serializers.DateTimeField()
     ended_at = serializers.DateTimeField(allow_null=True)
     total_time = serializers.IntegerField(allow_null=True)
+
+
+class EnrollMemberSerializer(serializers.Serializer):
+    """Serializer for enrolling a new member with an immediate membership."""
+    name = serializers.CharField(max_length=255)
+    phone = serializers.CharField(max_length=20)
+    email = serializers.EmailField(required=False, allow_null=True, allow_blank=True)
+    duration_months = serializers.IntegerField(min_value=1, max_value=24)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    amount_paid = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    start_date = serializers.DateField(required=False, allow_null=True)
+    is_active = serializers.BooleanField(default=True)
+
+    def validate_phone(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('Phone number is required.')
+        return value.strip()
+
+
+class UpdateMemberSerializer(serializers.Serializer):
+    """Serializer for updating member details."""
+    name = serializers.CharField(max_length=255, required=False)
+    phone = serializers.CharField(max_length=20, required=False)
+    email = serializers.EmailField(required=False, allow_null=True, allow_blank=True)
+
+
+class MembershipCreateForMemberSerializer(serializers.Serializer):
+    """Serializer for adding a new membership period to an existing member."""
+    duration_months = serializers.IntegerField(min_value=1, max_value=24)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    amount_paid = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    start_date = serializers.DateField(required=False, allow_null=True)
+    is_active = serializers.BooleanField(default=True)
+
+
+class MembershipUpdateSerializer(serializers.Serializer):
+    """Serializer for updating membership details."""
+    duration_months = serializers.IntegerField(min_value=1, max_value=24, required=False)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    amount_paid = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    start_date = serializers.DateField(required=False, allow_null=True)
+    is_active = serializers.BooleanField(required=False)
