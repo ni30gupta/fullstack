@@ -11,6 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from .models import Gym, Membership, GymActivity, BodyPart
+from notifications.models import Notification
 from .serializers import (ActivateMemberSerializer, ActivityHistorySerializer, GymSerializer,
     MembershipSerializer, SubscribeSerializer)
 from .serializers import CheckInSerializer, GymLoadSerializer
@@ -20,9 +21,33 @@ from django.utils import timezone
 from datetime import timedelta, datetime
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 
 User = get_user_model()
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def gym_updates(request):
+    """Return persistent notifications for the gym of the authenticated user."""
+    membership = Membership.objects.filter(user=request.user, is_active=True).select_related('gym').order_by('-created_at').first()
+    if not membership or not membership.gym:
+        return Response([])
+
+    notifications = Notification.objects.filter(gym=membership.gym, persistent=True).order_by('-created_at')
+    data = [
+        {
+            'id': n.id,
+            'title': n.title,
+            'message': n.message,
+            'category': n.category,
+            'created_at': n.created_at.isoformat(),
+        }
+        for n in notifications
+    ]
+    return Response(data)
 
 
 class IsOwnerOrAdmin(permissions.BasePermission):

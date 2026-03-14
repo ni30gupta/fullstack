@@ -13,6 +13,7 @@ export const STORAGE_KEYS = {
   GYM_INFO: '@GymRush:gymInfo',
   CURRENT_RUSH: '@GymRush:currentRush',
   ACTIVE_MEMBERSHIP: '@GymRush:activeMembership',
+  UPDATES_BADGE_COUNT: '@GymRush:updatesBadgeCount',
   THEME_PREFERENCE: '@GymRush:themePreference',
 };
 
@@ -53,6 +54,7 @@ export const config = {
   GYMS_MY_WORKOUTS: '/api/gyms/my-workouts/',
   GYM_SEARCH: '/api/gyms/search/',
   GYM_DETAIL: '/api/gyms/:id/',
+  GYM_UPDATES: '/api/gym/updates/',
 };
 
 export function buildEndpoint(template, params = {}) {

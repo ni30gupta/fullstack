@@ -1,6 +1,11 @@
 import React, { createContext, useReducer, useEffect, useCallback, useRef, useMemo } from 'react';
 import { authService, authStorage } from '../services';
 import { setAuthToken, clearAuthToken } from '../services/authToken';
+import {
+  hasNotificationPermission,
+  subscribeGymTopic,
+  unsubscribeGymTopic,
+} from '../services/notifications';
 
 // Initial state
 const initialState = {
@@ -63,6 +68,7 @@ const AuthContext = createContext(undefined);
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
   const isFetchingProfile = useRef(false);
+  const subscribedGymRef = useRef(null);
 
   // Helper: persist tokens and update state
   const saveTokens = useCallback(async (access, refresh) => {
@@ -81,20 +87,44 @@ export function AuthProvider({ children }) {
     ].filter(Boolean));
   }, []);
 
+  const updateTopicSubscription = useCallback(async (gymId) => {
+    // Only subscribe if permission was already granted (never prompt here).
+    // The actual permission prompt is handled by DashboardScreen on mount.
+    const granted = await hasNotificationPermission();
+    if (!granted) {
+      return;
+    }
+
+    // If the user is already subscribed to a gym topic, unsubscribe first.
+    if (subscribedGymRef.current && subscribedGymRef.current !== gymId) {
+      await unsubscribeGymTopic(subscribedGymRef.current);
+      subscribedGymRef.current = null;
+    }
+
+    if (gymId) {
+      await subscribeGymTopic(gymId);
+      subscribedGymRef.current = gymId;
+    }
+  }, []);
+
   // Fetch profile from server
   const fetchProfile = useCallback(async () => {
     if (isFetchingProfile.current) return;
     isFetchingProfile.current = true;
-    
+
     try {
       const profileData = await authService.getProfile();
       dispatch({ type: 'SET_PROFILE', payload: profileData });
       await persistProfile(profileData);
+
+      const gymId = profileData?.active_membership?.gym_id ?? profileData?.gym_details?.id;
+      await updateTopicSubscription(gymId);
+
       return profileData;
     } finally {
       isFetchingProfile.current = false;
     }
-  }, [persistProfile]);
+  }, [persistProfile, updateTopicSubscription]);
 
   // Initialize auth on mount
   const initializeAuth = useCallback(async () => {
@@ -121,11 +151,15 @@ export function AuthProvider({ children }) {
           type: 'SET_PROFILE', 
           payload: { user, active_membership: membership, gym_details: gymDetails, is_owner: !!gymDetails }
         });
+        const gymId = membership?.gym_id ?? gymDetails?.id;
+        await updateTopicSubscription(gymId);
       }
 
       // Refresh from server
       try {
-        await fetchProfile();
+        const profileData = await fetchProfile();
+        const gymId = profileData?.active_membership?.gym_id ?? profileData?.gym_details?.id;
+        await updateTopicSubscription(gymId);
       } catch (e) {
         if (e.message?.includes('401') || e.message?.includes('Unauthorized')) {
           await authStorage.clearAll();
@@ -138,7 +172,7 @@ export function AuthProvider({ children }) {
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [fetchProfile]);
+  }, [fetchProfile, updateTopicSubscription]);
 
   useEffect(() => {
     initializeAuth();
@@ -215,6 +249,10 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     try { await authService.logout(); } catch {}
+    if (subscribedGymRef.current) {
+      await unsubscribeGymTopic(subscribedGymRef.current);
+      subscribedGymRef.current = null;
+    }
     clearAuthToken();
     await authStorage.clearAll();
     dispatch({ type: 'CLEAR_AUTH' });

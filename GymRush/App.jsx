@@ -1,10 +1,11 @@
-import React from 'react';
-import { StatusBar, View, Text } from 'react-native';
+import React, { useEffect } from 'react';
+import { StatusBar, View, Text, Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { AuthProvider, CheckinProvider } from './src/context';
+import { AuthProvider, CheckinProvider, NotificationBadgeProvider, NotificationBadgeContext } from './src/context';
 import { BodyPartLoadProvider } from './src/hooks/useBodyPartLoad';
 import { RootNavigator } from './src/navigation';
 import { COLORS } from './src/constants/theme';
+import { onForegroundMessage, onNotificationOpenedApp } from './src/services/notifications';
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false, error: null };
@@ -26,6 +27,40 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+const NotificationHandler = () => {
+  const { incrementBadge } = React.useContext(NotificationBadgeContext);
+
+  useEffect(() => {
+    const unsubscribeForeground = onForegroundMessage(async (remoteMessage) => {
+      const category = remoteMessage?.data?.category;
+      if (category === 'gym_update') {
+        incrementBadge();
+        return;
+      }
+
+      const title = remoteMessage?.notification?.title;
+      const body = remoteMessage?.notification?.body;
+      if (title || body) {
+        Alert.alert(title ?? 'Notification', body ?? '');
+      }
+    });
+
+    const unsubscribeOpened = onNotificationOpenedApp((remoteMessage) => {
+      const category = remoteMessage?.data?.category;
+      if (category === 'gym_update') {
+        incrementBadge();
+      }
+    });
+
+    return () => {
+      unsubscribeForeground();
+      unsubscribeOpened();
+    };
+  }, [incrementBadge]);
+
+  return null;
+};
+
 const App = () => {
   return (
     <ErrorBoundary>
@@ -33,9 +68,12 @@ const App = () => {
         <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
         <AuthProvider>
           <CheckinProvider>
-            <BodyPartLoadProvider>
-              <RootNavigator />
-            </BodyPartLoadProvider>
+            <NotificationBadgeProvider>
+              <BodyPartLoadProvider>
+                <NotificationHandler />
+                <RootNavigator />
+              </BodyPartLoadProvider>
+            </NotificationBadgeProvider>
           </CheckinProvider>
         </AuthProvider>
       </SafeAreaProvider>

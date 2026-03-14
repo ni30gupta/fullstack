@@ -9,6 +9,8 @@ router.register(r'gyms', GymViewSet, basename='gym')
 urlpatterns = [
     path('gyms/my-activity/', MyActivityView.as_view(), name='my-activity'),
     path('gyms/my-workouts/', MyWorkoutHistoryView.as_view(), name='my-workouts'),
+    # List persistent updates for the user's gym membership
+    path('gym/updates/', gym_updates, name='gym-updates'),
     # Checkout without id: will checkout all active activities for authenticated user
     path('gym/check-out/', CheckoutView.as_view(), name='gym-checkout-all'),
     path('gym/check-out/<int:session_id>/', CheckoutView.as_view(), name='gym-checkout'),

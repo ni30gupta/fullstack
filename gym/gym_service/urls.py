@@ -13,6 +13,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('user.urls')),
     path('api/', include('gym.urls')),
+    path('api/notifications/', include('notifications.urls')),
 ]
 
 # Serve uploaded media files in development (DEBUG=True only)

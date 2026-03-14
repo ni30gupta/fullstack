@@ -3,9 +3,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar, GymRush, ActiveSessionCard, OverlayLoader } from '../../components';
 import { useAuth, useCheckin, useBodyPartLoad, useGeolocation } from '../../hooks';
 import { gymService } from '../../services';
+import { requestNotificationPermission, getDeviceToken, subscribeGymTopic } from '../../services/notifications';
 import { COLORS, SIZES } from '../../constants/theme';
 import { getDistanceMeters } from '../../utils';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 const GYM_CHECKIN_RADIUS_METERS = 50;
 
@@ -15,6 +16,30 @@ export const DashboardScreen = ({ navigation }) => {
   const { getCurrentRush, loading: rushLoading } = useBodyPartLoad();
   const { getLocation, requestPermission, loading: locationLoading } = useGeolocation();
   const [selectedParts, setSelectedParts] = useState([]);
+
+  const notifRequested = useRef(false);
+
+  // Ask for notification permission as soon as the dashboard mounts.
+  // On Android 13+ this triggers the runtime POST_NOTIFICATIONS dialog.
+  useEffect(() => {
+    if (notifRequested.current) return;
+    notifRequested.current = true;
+
+    (async () => {
+      try {
+        const granted = await requestNotificationPermission();
+        if (granted) {
+          await getDeviceToken();
+          if (activeGymId) {
+            await subscribeGymTopic(activeGymId);
+          }
+        }
+      } catch (e) {
+        console.warn('Notification setup error:', e);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Ask for location permission as soon as the dashboard mounts (member only).
   // This surfaces the permission + GPS dialogs before the user taps Check In.

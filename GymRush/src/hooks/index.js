@@ -6,3 +6,4 @@ export { useCheckin } from './useCheckin';
 export { useBodyPartLoad, BodyPartLoadProvider } from './useBodyPartLoad';
 export { default as useSlots } from './useSlots';
 export { useGeolocation } from './useGeolocation';
+export { useUpdates } from './useUpdates';

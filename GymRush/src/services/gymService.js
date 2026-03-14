@@ -115,6 +115,15 @@ export const gymService = {
     }
   },
 
+  async getUpdates() {
+    try {
+      const response = await api.get(ENDPOINTS.GYM_UPDATES);
+      return response.data;
+    } catch (error) {
+      throw handleError(error);
+    }
+  },
+
   async getCurrentRush(gymId, dateStr, slot = 'current') {
     try {
       if (!gymId) {

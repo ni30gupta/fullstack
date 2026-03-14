@@ -1,33 +1,44 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import React, { useContext } from 'react';
+import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SIZES } from '../../constants/theme';
-
-// placeholder data; later this could be pulled from an API
-const dummyUpdates = [];
+import { useUpdates } from '../../hooks';
+import NotificationBadgeContext from '../../context/NotificationBadgeContext';
 
 export const UpdatesScreen = () => {
+  const { updates, loading, error, refetch } = useUpdates();
+  const { resetBadge } = useContext(NotificationBadgeContext);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      resetBadge();
+    }, [resetBadge]),
+  );
+
   const renderItem = ({ item }) => (
     <View style={styles.updateCard}>
       <Text style={styles.updateTitle}>{item.title}</Text>
-      <Text style={styles.updateBody}>{item.body}</Text>
+      <Text style={styles.updateBody}>{item.message}</Text>
+      <Text style={styles.updateDate}>{new Date(item.created_at).toLocaleString()}</Text>
     </View>
   );
 
   const renderEmpty = () => (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyText}>No updates available</Text>
+      <Text style={styles.emptyText}>{error ? error : 'No updates available'}</Text>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={[ 'top' ]}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <FlatList
-        data={dummyUpdates}
-        keyExtractor={(u, i) => String(i)}
+        data={updates}
+        keyExtractor={(u) => String(u.id)}
         renderItem={renderItem}
         ListEmptyComponent={renderEmpty}
         contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={refetch} tintColor={COLORS.primary} />}
       />
     </SafeAreaView>
   );

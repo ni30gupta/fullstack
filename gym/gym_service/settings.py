@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'django_celery_beat',  # Celery Beat admin UI for periodic tasks
     'user',
     'gym',
+    'notifications',
 ]
 
 MIDDLEWARE = [

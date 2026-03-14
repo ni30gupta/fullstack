@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "567207647863",
+    "project_id": "gym-rush-e42b4",
+    "storage_bucket": "gym-rush-e42b4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:567207647863:android:c0421af60a336100990472",
+        "android_client_info": {
+          "package_name": "com.gymrush"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWpF2YKUFxA6Ukc_gGYfPSzn_XTT0ToEA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
