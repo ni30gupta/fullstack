@@ -175,6 +175,16 @@ export const gymService = {
     }
   },
 
+  async getMembers(gymId) {
+    try {
+      if (!gymId) throw new Error('gym_id is required for getMembers');
+      const response = await api.get(`/api/gyms/${encodeURIComponent(gymId)}/members-list/`);
+      return response.data;
+    } catch (error) {
+      throw handleError(error);
+    }
+  },
+
 };
 
 export default gymService;

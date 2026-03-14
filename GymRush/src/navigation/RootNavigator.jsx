@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
+import { OwnerNavigator } from './OwnerNavigator';
 import QRScanner from '../screens/common/QRScanner';
 import BodyPartActivitiesScreen from '../screens/main/BodyPartActivitiesScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
@@ -15,7 +16,7 @@ import { COLORS } from '../constants/theme';
 const Stack = createNativeStackNavigator();
 
 export const RootNavigator = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isOwner } = useAuth();
 
   if (isLoading) {
     return <Loading fullScreen message="Loading..." />;
@@ -45,24 +46,39 @@ export const RootNavigator = () => {
     >
       <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: true }}>
         {isAuthenticated ? (
-          <>
-            <Stack.Screen name="Main" component={MainNavigator} />
-            <Stack.Screen name="QRScanner" component={QRScanner} />
-            <Stack.Screen name="BodyPartActivities" component={BodyPartActivitiesScreen} />
-            {/* include Profile */}
-            {/* root-level profile screen; name unique to avoid tab collision */}
-            <Stack.Screen name="ProfileRoot" component={ProfileScreen} />
-            <Stack.Screen 
-              name="EditProfile" 
-              component={EditProfileScreen}
-              options={{ gestureEnabled: true, animation: 'slide_from_right' }}
-            />
-            <Stack.Screen 
-              name="Membership"
-              component={MembershipScreen}
-              options={{ gestureEnabled: true, animation: 'slide_from_right' }}
-            />
-          </>
+          isOwner ? (
+            // ── Gym Owner experience ──────────────────────────────────────────
+            <>
+              <Stack.Screen name="Owner" component={OwnerNavigator} />
+              {/* Owner taps a body part on the rush screen → see checked-in members */}
+              <Stack.Screen name="BodyPartActivities" component={BodyPartActivitiesScreen} />
+              {/* Root-level profile so avatar tap in header still works */}
+              <Stack.Screen name="ProfileRoot" component={ProfileScreen} />
+              <Stack.Screen
+                name="EditProfile"
+                component={EditProfileScreen}
+                options={{ gestureEnabled: true, animation: 'slide_from_right' }}
+              />
+            </>
+          ) : (
+            // ── Gym Member experience ─────────────────────────────────────────
+            <>
+              <Stack.Screen name="Main" component={MainNavigator} />
+              <Stack.Screen name="QRScanner" component={QRScanner} />
+              <Stack.Screen name="BodyPartActivities" component={BodyPartActivitiesScreen} />
+              <Stack.Screen name="ProfileRoot" component={ProfileScreen} />
+              <Stack.Screen
+                name="EditProfile"
+                component={EditProfileScreen}
+                options={{ gestureEnabled: true, animation: 'slide_from_right' }}
+              />
+              <Stack.Screen
+                name="Membership"
+                component={MembershipScreen}
+                options={{ gestureEnabled: true, animation: 'slide_from_right' }}
+              />
+            </>
+          )
         ) : (
           <Stack.Screen name="Auth" component={AuthNavigator} />
         )}

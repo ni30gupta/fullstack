@@ -9,8 +9,7 @@ def has_active_membership_or_owner_or_staff(user: Any, gym: Any) -> bool:
     """Return True if the `user` is allowed to check in to `gym`.
 
     Allowed if the user is staff, the gym owner, or has an active Membership
-    for the gym. Importing `Membership` is done lazily to avoid circular
-    imports during module load.
+    for the gym. Supports both new Member-based and legacy User-based architecture.
     """
     if user.is_staff:
         return True
@@ -18,9 +17,60 @@ def has_active_membership_or_owner_or_staff(user: Any, gym: Any) -> bool:
         return True
 
     # Lazy import to avoid importing models at package import time
-    from .models import Membership
+    from .models import Membership, Member
 
-    return Membership.objects.filter(user=user, gym=gym, is_active=True).exists()
+    # New architecture: Check via Member
+    member = Member.objects.filter(user=user, gym=gym).first()
+    if member:
+        if Membership.objects.filter(member=member, is_active=True).exists():
+            return True
+
+    # Legacy architecture: Check direct user-gym relationship
+    if Membership.objects.filter(user=user, gym=gym, is_active=True).exists():
+        return True
+
+    return False
+
+
+def get_active_member(user: Any, gym: Any):
+    """Get the active Member record for a user in a gym.
+    
+    Returns the Member instance if exists and has active membership, else None.
+    """
+    from .models import Member, Membership
+    
+    member = Member.objects.filter(user=user, gym=gym).first()
+    if member:
+        if Membership.objects.filter(member=member, is_active=True).exists():
+            return member
+    return None
+
+
+def get_user_gym(user: Any):
+    """Get the gym where user has active membership.
+    
+    Returns the first gym with active membership, or None.
+    Supports both Member-based and legacy architecture.
+    """
+    from .models import Member, Membership
+    
+    # Try Member-based first
+    member = Member.objects.filter(
+        user=user,
+        memberships__is_active=True
+    ).select_related('gym').first()
+    if member:
+        return member.gym
+    
+    # Legacy: direct user-gym
+    membership = Membership.objects.filter(
+        user=user,
+        is_active=True
+    ).select_related('gym').first()
+    if membership:
+        return membership.gym
+    
+    return None
 
 
 def parse_slot_param(date_obj, slot_param):

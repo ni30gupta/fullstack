@@ -1,6 +1,6 @@
 import api from './api';
 import { ENDPOINTS } from '../constants/config';
-// authService should only call APIs and return data.
+import { authStorage } from './storage';
 // Persistence is handled by the AuthProvider (context).
 
 const handleError = (error) => {
@@ -65,7 +65,10 @@ export const authService = {
 
   async logout() {
     try {
-      await api.post(ENDPOINTS.AUTH_LOGOUT);
+      const refresh = await authStorage.getRefreshToken();
+      if (refresh) {
+        await api.post(ENDPOINTS.AUTH_LOGOUT, { refresh });
+      }
     } catch (error) {
       console.error('Logout API error:', error);
     } finally {

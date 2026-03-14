@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Gym, Membership
+from .models import Gym, Membership, Member
 from .models import GymActivity
 from django.utils import timezone
 
@@ -46,20 +46,71 @@ class GymSerializer(serializers.ModelSerializer):
         return value
 
 
+class MemberSerializer(serializers.ModelSerializer):
+    """Serializer for gym members."""
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    user_email = serializers.CharField(source='user.email', read_only=True, allow_null=True)
+    gym_name = serializers.CharField(source='gym.name', read_only=True)
+
+    class Meta:
+        model = Member
+        fields = (
+            'id', 'gym', 'gym_name', 'user', 'user_username', 'user_email',
+            'name', 'phone', 'email', 'created_at', 'updated_at',
+        )
+        read_only_fields = ('gym', 'user', 'created_at', 'updated_at')
+
+
+class MemberCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating new members (by gym owner)."""
+    
+    class Meta:
+        model = Member
+        fields = ('name', 'phone', 'email')
+
+    def validate_phone(self, value):
+        """Validate phone is not empty."""
+        if not value or not value.strip():
+            raise serializers.ValidationError('Phone number is required.')
+        return value.strip()
+
+
 class MembershipSerializer(serializers.ModelSerializer):
     """Serializer for gym membership/member management."""
-    user_username = serializers.CharField(source='user.username', read_only=True)
-    user_email = serializers.CharField(source='user.email', read_only=True)
-    gym_name = serializers.CharField(source='gym.name', read_only=True)
+    # New member-based fields
+    member_id = serializers.IntegerField(source='member.id', read_only=True, allow_null=True)
+    member_name = serializers.CharField(source='member.name', read_only=True, allow_null=True)
+    member_phone = serializers.CharField(source='member.phone', read_only=True, allow_null=True)
+    
+    # Legacy user-based fields (for backward compatibility)
+    user_username = serializers.SerializerMethodField()
+    user_email = serializers.SerializerMethodField()
+    gym_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Membership
         fields = (
-            'id', 'user', 'user_username', 'user_email', 'gym', 'gym_name',
+            'id', 'member', 'member_id', 'member_name', 'member_phone',
+            'user', 'user_username', 'user_email', 'gym', 'gym_name',
             'duration_months', 'start_date', 'end_date', 'is_active',
-            'created_at',
+            'amount', 'created_at',
         )
-        read_only_fields = ('gym', 'start_date', 'end_date', 'created_at')
+        read_only_fields = ('gym', 'start_date', 'end_date', 'created_at', 'member')
+
+    def get_user_username(self, obj):
+        """Get username - prefer member.user, fallback to direct user."""
+        user = obj.effective_user
+        return user.username if user else None
+
+    def get_user_email(self, obj):
+        """Get email - prefer member.user, fallback to direct user."""
+        user = obj.effective_user
+        return user.email if user else None
+
+    def get_gym_name(self, obj):
+        """Get gym name - prefer member.gym, fallback to direct gym."""
+        gym = obj.effective_gym
+        return gym.name if gym else None
 
 
 class SubscribeSerializer(serializers.Serializer):

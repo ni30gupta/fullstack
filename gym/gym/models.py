@@ -37,13 +37,125 @@ class Gym(models.Model):
         return self.name
 
 
+class Member(models.Model):
+    """
+    Domain model representing a person's membership record in a specific gym.
+    
+    Architecture: User → Member → Membership
+    - User = authentication identity (always created, even by gym owner)
+    - Member = a person's record in a gym (always linked to User)
+    - Membership = membership period/history
+    
+    When gym owner adds a member, a User account is created automatically.
+    The member can then login via OTP to access their account.
+    """
+    gym = models.ForeignKey(
+        Gym,
+        on_delete=models.CASCADE,
+        db_column='gym_id',
+        related_name='members'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        db_column='user_id',
+        related_name='gym_members',
+        help_text='Linked user account. Always present.'
+    )
+    name = models.CharField(max_length=255)
+    phone = models.CharField(max_length=20, db_index=True)
+    email = models.EmailField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'member'
+        indexes = [
+            models.Index(fields=['gym', 'phone']),
+            models.Index(fields=['phone']),
+            models.Index(fields=['user']),
+        ]
+        constraints = [
+            # Prevent duplicate users within the same gym
+            models.UniqueConstraint(fields=['gym', 'user'], name='unique_gym_user'),
+            # Prevent duplicate phone numbers within the same gym
+            models.UniqueConstraint(
+                fields=['gym', 'phone'],
+                name='unique_gym_phone',
+                condition=models.Q(phone__gt='')  # Only enforce when phone is not empty
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} - {self.gym.name} ({self.user.username})"
+
+    @classmethod
+    def get_or_create_for_user(cls, user, gym, defaults=None):
+        """
+        Get or create a Member for the given user and gym.
+        """
+        defaults = defaults or {}
+        
+        # Try to find an existing member for this user+gym
+        member = cls.objects.filter(user=user, gym=gym).first()
+        if member:
+            return member, False
+        
+        # Create new member
+        phone = getattr(user, 'phone', '') or defaults.get('phone', '')
+        name = defaults.get('name', getattr(user, 'username', ''))
+        
+        member = cls.objects.create(
+            gym=gym,
+            user=user,
+            name=name,
+            phone=phone,
+            email=defaults.get('email', getattr(user, 'email', None))
+        )
+        return member, True
+
+
 class Membership(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, db_column='user_id', related_name='memberships')
-    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, db_column='gym_id', related_name='memberships')
+    """
+    Represents a membership period (subscription) for a Member.
+    
+    Architecture: Member → Membership (many memberships per member)
+    This allows tracking membership history and renewals.
+    """
+    # New architecture: membership belongs to a Member
+    member = models.ForeignKey(
+        Member,
+        on_delete=models.CASCADE,
+        db_column='member_id',
+        related_name='memberships',
+        null=True,  # Temporarily nullable during migration
+        blank=True
+    )
+    
+    # Legacy fields - kept for backward compatibility during transition
+    # TODO: Remove after full migration to Member-based architecture
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        db_column='user_id',
+        related_name='memberships',
+        null=True,  # Now nullable
+        blank=True
+    )
+    gym = models.ForeignKey(
+        Gym,
+        on_delete=models.CASCADE,
+        db_column='gym_id',
+        related_name='memberships',
+        null=True,  # Now nullable (will get gym from member)
+        blank=True
+    )
+    
     duration_months = models.PositiveSmallIntegerField(default=1)  # Duration in months (1-24)
     start_date = models.DateField(null=True, blank=True)  # Set when activated by gym owner
     end_date = models.DateField(null=True, blank=True)  # Calculated from start_date + duration
     is_active = models.BooleanField(default=False)  # Initially inactive until gym owner verifies
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # Payment amount
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -51,10 +163,30 @@ class Membership(models.Model):
         indexes = [
             models.Index(fields=['user', 'is_active']),
             models.Index(fields=['gym', 'is_active']),
+            models.Index(fields=['member', 'is_active']),
+            models.Index(fields=['member', 'end_date']),
         ]
     
     def __str__(self):
-        return f"{self.user.username} - {self.gym.name} ({self.duration_months} months)"
+        if self.member:
+            return f"{self.member.name} - {self.member.gym.name} ({self.duration_months} months)"
+        elif self.user:
+            return f"{self.user.username} - {self.gym.name} ({self.duration_months} months)"
+        return f"Membership #{self.pk}"
+    
+    @property
+    def effective_user(self):
+        """Get user - prefer member.user, fallback to direct user."""
+        if self.member and self.member.user:
+            return self.member.user
+        return self.user
+    
+    @property
+    def effective_gym(self):
+        """Get gym - prefer member.gym, fallback to direct gym."""
+        if self.member:
+            return self.member.gym
+        return self.gym
     
     def activate(self):
         """Activate the membership and set start/end dates."""
@@ -66,6 +198,12 @@ class Membership(models.Model):
         self.end_date = self.start_date + relativedelta(months=self.duration_months)
         self.save()
         return self
+    
+    def save(self, *args, **kwargs):
+        """Ensure gym is synced from member if member is set."""
+        if self.member and not self.gym:
+            self.gym = self.member.gym
+        super().save(*args, **kwargs)
 
 
 # NOTE: GymVisit removed — using only GymActivity for tracking checkins and body parts.

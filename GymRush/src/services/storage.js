@@ -98,11 +98,20 @@ export const authStorage = {
     await storage.remove(STORAGE_KEYS.GYM_DETAILS);
   },
 
+  async saveIsOwner(isOwner) {
+    await storage.set(STORAGE_KEYS.IS_OWNER, isOwner);
+  },
+
+  async getIsOwner() {
+    return await storage.get(STORAGE_KEYS.IS_OWNER);
+  },
+
   async clearAll() {
     await this.clearTokens();
     await this.clearUserProfile();
     await this.clearMembership();
     await this.clearGymDetails();
+    await storage.remove(STORAGE_KEYS.IS_OWNER);
     await storage.remove(STORAGE_KEYS.GYM_INFO);
   },
 };

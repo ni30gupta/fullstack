@@ -37,9 +37,8 @@ export const GymRush = ({ onSelectionChange }) => {
   const { isCheckedIn, checkIn, loading: checkinLoading } = useCheckin();
   const { slots, fmt } = useSlots();
 
-  const { gymDetails } = useAuth();
+  const { isOwner } = useAuth();
   const navigation = useNavigation();
-  const isOwner = !!gymDetails;
 
   const [selectedParts, setSelectedParts] = useState([]);
   const togglePart = (part) => {

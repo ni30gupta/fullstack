@@ -20,14 +20,7 @@ const validationSchema = {
 };
 
 export const LoginScreen = ({ navigation }) => {
-  const { login, isLoading, error, isAuthenticated } = useAuth();
-
-  // if somehow the user is already logged in, redirect immediately
-  React.useEffect(() => {
-    if (isAuthenticated) {
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-    }
-  }, [isAuthenticated, navigation]);
+  const { login, isLoading, error } = useAuth();
 
   const { values, errors, touched, handleChange, handleBlur, handleSubmit, isValid } = useForm(
     { username: '', password: '' },
@@ -35,14 +28,9 @@ export const LoginScreen = ({ navigation }) => {
   );
 
   const onSubmit = async () => {
-    const result = await login(values.username, values.password);
-    if (result.success) {
-      // ensure navigation moves out of auth flow; resetting the stack avoids
-      // back button returning to login.
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-    } else {
-      // error text already surfaced via context
-    }
+    // login() updates AuthContext → RootNavigator re-renders automatically
+    // into the correct role navigator (Owner or Member). No manual navigation needed.
+    await login(values.username, values.password);
   };
 
   return (

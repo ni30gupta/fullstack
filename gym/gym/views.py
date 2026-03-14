@@ -10,10 +10,10 @@ import logging
 # module logger
 logger = logging.getLogger(__name__)
 
-from .models import Gym, Membership, GymActivity, BodyPart
+from .models import Gym, Membership, Member, GymActivity, BodyPart
 from notifications.models import Notification
 from .serializers import (ActivateMemberSerializer, ActivityHistorySerializer, GymSerializer,
-    MembershipSerializer, SubscribeSerializer)
+    MembershipSerializer, MemberSerializer, MemberCreateSerializer, SubscribeSerializer)
 from .serializers import CheckInSerializer, GymLoadSerializer
 from .serializers import CurrentActivitySerializer
 from .utils import has_active_membership_or_owner_or_staff
@@ -32,11 +32,19 @@ User = get_user_model()
 @permission_classes([IsAuthenticated])
 def gym_updates(request):
     """Return persistent notifications for the gym of the authenticated user."""
-    membership = Membership.objects.filter(user=request.user, is_active=True).select_related('gym').order_by('-created_at').first()
-    if not membership or not membership.gym:
+    # Try new architecture first (via Member)
+    member = Member.objects.filter(user=request.user).select_related('gym').first()
+    if member:
+        gym = member.gym
+    else:
+        # Fallback to old architecture
+        membership = Membership.objects.filter(user=request.user, is_active=True).select_related('gym').order_by('-created_at').first()
+        gym = membership.gym if membership else None
+    
+    if not gym:
         return Response([])
 
-    notifications = Notification.objects.filter(gym=membership.gym, persistent=True).order_by('-created_at')
+    notifications = Notification.objects.filter(gym=gym, persistent=True).order_by('-created_at')
     data = [
         {
             'id': n.id,
@@ -205,13 +213,40 @@ class GymViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated], url_path='members-list')
     def members(self, request, pk=None):
-        """List all members of a gym. Only gym owner or staff can view."""
+        """List all members of a gym. Only gym owner or staff can view.
+        
+        Returns members with their latest membership info.
+        """
         gym = self.get_object()
         if not (request.user.is_staff or gym.owner == request.user):
             return Response({'detail': 'You do not have permission to view members.'}, 
                           status=status.HTTP_403_FORBIDDEN)
         
-        memberships = Membership.objects.filter(gym=gym).select_related('user').order_by('-created_at')
+        # New architecture: query Members directly
+        members = Member.objects.filter(gym=gym).select_related('user').prefetch_related('memberships').order_by('-created_at')
+        
+        # Optional filter by linked status
+        linked_filter = request.query_params.get('linked')
+        if linked_filter is not None:
+            if linked_filter.lower() == 'true':
+                members = members.filter(user__isnull=False)
+            else:
+                members = members.filter(user__isnull=True)
+        
+        serializer = MemberSerializer(members, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated], url_path='memberships-list')
+    def memberships_list(self, request, pk=None):
+        """List all memberships (subscription periods) of a gym. Only gym owner or staff can view."""
+        gym = self.get_object()
+        if not (request.user.is_staff or gym.owner == request.user):
+            return Response({'detail': 'You do not have permission to view memberships.'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        memberships = Membership.objects.filter(
+            Q(gym=gym) | Q(member__gym=gym)
+        ).select_related('user', 'member', 'member__user').order_by('-created_at')
         
         # Optional filter by is_active status
         is_active_filter = request.query_params.get('is_active')
@@ -220,6 +255,88 @@ class GymViewSet(viewsets.ModelViewSet):
         
         serializer = MembershipSerializer(memberships, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated], url_path='add-member')
+    def add_member(self, request, pk=None):
+        """Add a new member to the gym (by gym owner). Member may not have a user account yet.
+        
+        POST /api/gyms/{gym_id}/add-member/
+        
+        Request body:
+        {
+            "name": "John Doe",
+            "phone": "9876543210",
+            "email": "john@example.com"  // optional
+        }
+        """
+        gym = self.get_object()
+        if not (request.user.is_staff or gym.owner == request.user):
+            return Response({'detail': 'You do not have permission to add members.'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = MemberCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        phone = serializer.validated_data['phone']
+        name = serializer.validated_data['name']
+        email = serializer.validated_data.get('email')
+        
+        # Check if user with this phone already exists
+        existing_user = User.objects.filter(phone=phone).first()
+        
+        if existing_user:
+            # Check if this user already has a member record in this gym
+            existing_member = Member.objects.filter(gym=gym, user=existing_user).first()
+            if existing_member:
+                return Response({'detail': 'This user is already a member of this gym.'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            # Create Member for existing user
+            member = Member.objects.create(
+                gym=gym,
+                user=existing_user,
+                name=name,
+                phone=phone,
+                email=email or existing_user.email
+            )
+        else:
+            # Create new User account for this member
+            from user.models import UserProfile
+            import secrets
+            
+            # Generate username from phone (ensure uniqueness)
+            username = f"member_{phone}"
+            if User.objects.filter(username=username).exists():
+                username = f"member_{phone}_{secrets.token_hex(3)}"
+            
+            # Create user with unusable password (they'll login via OTP)
+            user = User.objects.create(
+                username=username,
+                phone=phone,
+                email=email or '',
+            )
+            user.set_unusable_password()  # User will login via OTP
+            user.save()
+            
+            # Create profile with member's name
+            UserProfile.objects.create(
+                user=user,
+                name=name,
+                gender='OTHER',  # Default, can be updated later
+                preferred_time='ANYTIME',
+                preferred_days='MON',
+            )
+            
+            # Create Member linked to this new user
+            member = Member.objects.create(
+                gym=gym,
+                user=user,
+                name=name,
+                phone=phone,
+                email=email
+            )
+        
+        return Response(MemberSerializer(member).data, status=status.HTTP_201_CREATED)
 
    
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
@@ -240,15 +357,38 @@ class GymViewSet(viewsets.ModelViewSet):
         serializer = SubscribeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # Check if membership already exists for this user and gym
-        existing = Membership.objects.filter(user=user, gym=gym).first()
+        # New architecture: Get or create Member first
+        profile = getattr(user, 'profile', None)
+        name = profile.name if profile and profile.name else user.username
+        phone = getattr(user, 'phone', '') or ''
+        email = getattr(user, 'email', None)
+        
+        member, member_created = Member.get_or_create_for_user(
+            user=user,
+            gym=gym,
+            defaults={
+                'name': name,
+                'phone': phone,
+                'email': email
+            }
+        )
+        
+        # Check if active membership already exists for this member
+        existing = Membership.objects.filter(member=member, is_active=True).first()
         if existing:
-            return Response({'detail': 'You already have a membership request for this gym.'}, 
+            return Response({'detail': 'You already have an active membership for this gym.'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check for pending (inactive) membership
+        pending = Membership.objects.filter(member=member, is_active=False).first()
+        if pending:
+            return Response({'detail': 'You already have a pending membership request for this gym.'}, 
                           status=status.HTTP_400_BAD_REQUEST)
         
         membership = Membership.objects.create(
-            user=user,
-            gym=gym,
+            member=member,
+            user=user,  # Keep for backward compatibility
+            gym=gym,    # Keep for backward compatibility
             duration_months=serializer.validated_data['duration_months'],
             is_active=False  # Initially inactive until gym owner activates
         )
@@ -275,7 +415,9 @@ class GymViewSet(viewsets.ModelViewSet):
                           status=status.HTTP_403_FORBIDDEN)
         
         try:
-            membership = Membership.objects.get(id=membership_id, gym=gym)
+            membership = Membership.objects.get(
+                Q(id=membership_id) & (Q(gym=gym) | Q(member__gym=gym))
+            )
         except Membership.DoesNotExist:
             return Response({'detail': 'Membership not found.'}, status=status.HTTP_404_NOT_FOUND)
         

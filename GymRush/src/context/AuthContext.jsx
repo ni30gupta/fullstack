@@ -79,11 +79,12 @@ export function AuthProvider({ children }) {
 
   // Helper: persist profile data to storage
   const persistProfile = useCallback(async (profileData) => {
-    const { user, active_membership, gym_details } = profileData;
+    const { user, active_membership, gym_details, is_owner } = profileData;
     await Promise.all([
       user && authStorage.saveUserProfile(user),
       active_membership && authStorage.saveMembership(active_membership),
       gym_details && authStorage.saveGymDetails(gym_details),
+      authStorage.saveIsOwner(is_owner ?? false),
     ].filter(Boolean));
   }, []);
 
@@ -140,16 +141,17 @@ export function AuthProvider({ children }) {
       dispatch({ type: 'SET_TOKENS', payload: token });
       
       // Load cached data (offline-first)
-      const [user, membership, gymDetails] = await Promise.all([
+      const [user, membership, gymDetails, cachedIsOwner] = await Promise.all([
         authStorage.getUserProfile(),
         authStorage.getMembership(),
         authStorage.getGymDetails(),
+        authStorage.getIsOwner(),
       ]);
       
       if (user) {
         dispatch({ 
           type: 'SET_PROFILE', 
-          payload: { user, active_membership: membership, gym_details: gymDetails, is_owner: !!gymDetails }
+          payload: { user, active_membership: membership, gym_details: gymDetails, is_owner: cachedIsOwner ?? false }
         });
         const gymId = membership?.gym_id ?? gymDetails?.id;
         await updateTopicSubscription(gymId);
